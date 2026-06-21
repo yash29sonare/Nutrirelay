@@ -1,41 +1,57 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
+# System Files
 .DS_Store
-*.pem
+Thumbs.db
+Desktop.ini
 
-# debug
+# Dependencies
+node_modules/
+
+# Locks (keep pnpm-lock.yaml — it is the project's lockfile)
+yarn.lock
+
+# Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# Mastra AI Framework caches & DBs
+.mastra/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+output.txt
 
-# vercel
-.vercel
+# Build outputs and framework caches
+.next/
+out/
+build/
+dist/
+.turbo/
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# Supabase local development caches
+supabase/.branches/
+supabase/.temp/
+.supabase/
+
+# Claude Code local files (entire directory — settings, memory, transcripts)
+.claude/
+
+# MCP configuration (may contain server URLs and tokens)
+.mcp.json
+
+# Environments, tokens, and secrets
+# .env.example is intentionally committed — it contains key names only, no values.
+# All other .env files are ignored.
+.env*.local
+.env.production
+.env.staging
+.env.development
+.secrets
+
+# TypeScript build info
+tsconfig.tsbuildinfo
+
+.agents/

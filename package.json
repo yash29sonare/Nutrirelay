@@ -6,21 +6,37 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "dev:mastra": "mastra dev --env .env.local",
+    "dev:trigger": "trigger.dev dev"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.80",
+    "@mastra/core": "^1.41.0",
+    "@mastra/pg": "^1.12.1",
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "@trigger.dev/sdk": "^4.4.6",
+    "@types/pg": "^8.20.0",
+    "ai": "^6.0.201",
+    "date-fns": "^3.6.0",
+    "lucide-react": "^1.17.0",
     "next": "16.2.7",
+    "pg": "^8.21.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@trigger.dev/build": "^4.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
+    "mastra": "^1.13.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
