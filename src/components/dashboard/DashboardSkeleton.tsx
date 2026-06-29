@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { PageContainer } from "@/components/layout/PageContainer";
 
 function PulseLine({ className = "" }: { className?: string }) {
   return (
@@ -61,7 +62,7 @@ function SkeletonTableRow() {
 
 export function DashboardSkeleton() {
   return (
-    <div className="px-6 py-6 space-y-8 max-w-6xl">
+    <PageContainer className="space-y-8">
       {/* Page heading skeleton */}
       <div className="space-y-1.5">
         <PulseLine className="h-6 w-32" />
@@ -122,6 +123,6 @@ export function DashboardSkeleton() {
           </table>
         </div>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

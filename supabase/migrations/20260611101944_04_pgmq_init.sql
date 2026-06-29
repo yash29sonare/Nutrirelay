@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS public.incoming_webhook_logs (
   message_type TEXT        NOT NULL,
   received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   processed_at TIMESTAMPTZ,
-  status       TEXT        NOT NULL DEFAULT 'queued'
-    CHECK (status IN ('queued', 'processed', 'failed', 'skipped'))
+  status       TEXT        NOT NULL DEFAULT 'CLAIMED'
+    CHECK (status IN ('CLAIMED', 'PROCESSING', 'RECLAIMED', 'SUCCESS', 'FAILED_HANDLED', 'RETRY'))
 );
 
 -- Hard uniqueness constraint on wam_id — DB-level deduplication guard
@@ -59,6 +59,7 @@ CREATE POLICY incoming_webhook_logs_service_only ON public.incoming_webhook_logs
   WITH CHECK (true);
 
 -- updated_at trigger
-CREATE OR REPLACE TRIGGER set_incoming_webhook_logs_updated_at
+DROP TRIGGER IF EXISTS set_incoming_webhook_logs_updated_at ON public.incoming_webhook_logs;
+CREATE TRIGGER set_incoming_webhook_logs_updated_at
   BEFORE UPDATE ON public.incoming_webhook_logs
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

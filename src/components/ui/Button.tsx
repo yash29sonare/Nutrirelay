@@ -1,4 +1,6 @@
 import { forwardRef } from "react";
+import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 type ButtonVariant = "default" | "ghost" | "outline" | "brand" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
@@ -6,6 +8,8 @@ type ButtonSize = "sm" | "md" | "lg";
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  loading?: boolean;
+  icon?: React.ReactNode;
 }
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
@@ -27,20 +31,36 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "default", size = "md", className = "", ...props }, ref) => {
+  (
+    {
+      variant = "default",
+      size = "md",
+      loading = false,
+      icon,
+      className = "",
+      disabled,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     return (
       <button
         ref={ref}
-        className={`
-          inline-flex items-center justify-center font-medium
-          transition-all duration-150 cursor-pointer
-          disabled:opacity-50 disabled:cursor-not-allowed
-          ${VARIANT_CLASSES[variant]}
-          ${SIZE_CLASSES[size]}
-          ${className}
-        `.trim()}
+        disabled={disabled || loading}
+        className={cn(
+          "inline-flex items-center justify-center font-medium",
+          "transition-all duration-150 cursor-pointer",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+          VARIANT_CLASSES[variant],
+          SIZE_CLASSES[size],
+          className
+        )}
         {...props}
-      />
+      >
+        {loading ? <Loader2 size={size === "sm" ? 12 : 14} className="animate-spin" /> : icon}
+        {children}
+      </button>
     );
   }
 );

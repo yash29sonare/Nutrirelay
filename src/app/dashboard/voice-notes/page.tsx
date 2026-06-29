@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { DashboardGrid } from "@/components/layout/DashboardGrid";
+import { DashboardSection } from "@/components/layout/DashboardSection";
 import { RecoveryGrid, type VoiceNoteRow } from "./RecoveryGrid";
 import { Mic, Clock } from "lucide-react";
 import type { Database } from "@/shared/types/supabase";
@@ -71,18 +76,15 @@ export default async function VoiceNotesPage() {
   ).length;
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-5xl">
-      <div>
-        <h1 className="text-xl font-semibold text-[var(--foreground)]">
-          Voice Note Recovery
-        </h1>
-        <p className="text-sm text-[var(--muted)] mt-0.5">
-          Failed transcriptions awaiting manual resolution.
-        </p>
-      </div>
+    <PageContainer className="max-w-5xl">
+      <PageHeader
+        title="Voice Note Recovery"
+        description="Failed transcriptions awaiting manual resolution."
+      />
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <DashboardSection title="Recovery metrics">
+        <DashboardGrid columns={2}>
         <Card>
           <CardContent className="flex items-center gap-4 py-5">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 shrink-0">
@@ -110,18 +112,17 @@ export default async function VoiceNotesPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </DashboardGrid>
+      </DashboardSection>
 
       {/* Recovery grid */}
       {!trainerId ? (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <p className="text-sm text-[var(--muted)]">Sign in to view recovery queue.</p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="Sign in to view recovery queue."
+        />
       ) : (
         <RecoveryGrid initialRows={rows} />
       )}
-    </div>
+    </PageContainer>
   );
 }

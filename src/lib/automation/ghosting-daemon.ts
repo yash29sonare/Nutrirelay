@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendTemplateMessage } from "@/lib/whatsapp/send";
+import { writeAuditLog } from "@/lib/operations/audit";
 
 // Clients silent for this long are considered ghosting
 const GHOST_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours
@@ -73,11 +74,24 @@ export async function runGhostingAudit(): Promise<void> {
 
     if (recentStrikes && recentStrikes.length > 0) continue;
 
-    // ── 4. Insert strike log entry ─────────────────────────────────────────
-    const { error: strikeError } = await db.from("strike_log").insert({
+    // ── 4. Resolve trainerId (tenant owner) — needed for audit + template ──
+    const { data: tcRow, error: tcError } = await db
+      .from("trainer_clients")
+      .select("trainer_id")
+      .eq("client_id", clientId)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (tcError || !tcRow) continue;
+
+    const trainerId = String(tcRow.trainer_id);
+
+    // ── 5. Insert strike log entry ─────────────────────────────────────────
+    const { data: strikeResult, error: strikeError } = await db.from("strike_log").insert({
       profile_id: clientId,
       reason: `Client silent for ${silenceHours}h — ghosting threshold exceeded`,
-    });
+    }).select("id").single();
 
     if (strikeError) {
       console.error(
@@ -88,13 +102,28 @@ export async function runGhostingAudit(): Promise<void> {
       continue;
     }
 
-    // ── 5. Send re-engagement template ────────────────────────────────────
+    if (strikeResult) {
+      await writeAuditLog({
+        trainer_id: trainerId,
+        actor_id: trainerId,
+        event_type: "ghosting_strike_created",
+        entity_type: "strike_log",
+        entity_id: String((strikeResult as { id: string }).id),
+        metadata: { client_id: clientId, silence_hours: silenceHours },
+      }).catch(() => {});
+    }
+
+    // ── 6. Send re-engagement template ────────────────────────────────────
     try {
-      await sendTemplateMessage(phone, "trainer_alert", [
-        clientName,
-        `No activity for ${silenceHours} hours`,
-      ]);
-      console.log(`[ghosting-daemon] alert sent to ${phone} (${silenceHours}h silent)`);
+      await sendTemplateMessage(
+        trainerId,
+        phone,
+        "trainer_alert",
+        [clientName, `No activity for ${silenceHours} hours`]
+      );
+      console.log(
+        `[ghosting-daemon] alert sent to ${phone} (${silenceHours}h silent)`
+      );
     } catch (err) {
       console.error(
         "[ghosting-daemon] message send failed for",

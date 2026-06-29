@@ -2,6 +2,14 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "All Clients" },
+  { value: "risk", label: "At Risk (2+ Strikes)" },
+  { value: "compliant", label: "Compliant" },
+];
 
 export function SearchFilters() {
   const router = useRouter();
@@ -25,24 +33,20 @@ export function SearchFilters() {
 
   return (
     <div className="flex flex-col sm:flex-row gap-3">
-      <input
+      <Input
         type="search"
         placeholder="Search clients…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Search clients by name"
-        className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+        className="flex-1"
       />
-      <select
+      <Select
         value={status}
         onChange={(e) => setStatus(e.target.value)}
         aria-label="Filter by client status"
-        className="px-3 py-2 text-sm rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-brand-500/40"
-      >
-        <option value="all">All Clients</option>
-        <option value="risk">At Risk (2+ Strikes)</option>
-        <option value="compliant">Compliant</option>
-      </select>
+        options={STATUS_OPTIONS}
+      />
     </div>
   );
 }

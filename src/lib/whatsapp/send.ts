@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { getTrainerWaba } from "@/lib/waba/getTrainerWaba";
+import { logCommunication } from "@/lib/communication-logger";
 
 // ── Custom errors ──────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ export type TemplateId =
   | "renewal_reminder_soft"
   | "renewal_reminder_urgent";
 
-type TemplateParamMap = {
+export type TemplateParamMap = {
   meal_confirmation: [clientName: string, mealName: string, calories: string];
   missing_details_clarification: [clientName: string];
   trainer_alert: [clientName: string, alertDetail: string];
@@ -155,6 +156,20 @@ async function callMetaApi(
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function resolveClientIdFromPhone(phone: string): Promise<string | null> {
+  const supabase = getServiceClient();
+  const normalized = normalizePhone(phone);
+  const { data } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("phone_number", normalized)
+    .limit(1)
+    .single();
+  return (data as { id: string } | null)?.id ?? null;
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 export async function sendFreeMessage(
@@ -194,6 +209,18 @@ export async function sendTemplateMessage<T extends TemplateId>(
     type: "template",
     template,
   });
+
+  const clientId = await resolveClientIdFromPhone(normalized);
+  if (clientId) {
+    await logCommunication({
+      trainer_id: trainerId,
+      client_id: clientId,
+      direction: "OUTBOUND",
+      message_type: "TEMPLATE",
+      delivery_status: "sent",
+      metadata: { template_id: templateId },
+    });
+  }
 }
 
 export async function sendDocumentMessage(
@@ -212,6 +239,18 @@ export async function sendDocumentMessage(
     type: "document",
     document: { link: documentLink, filename, caption },
   });
+
+  const clientId = await resolveClientIdFromPhone(normalized);
+  if (clientId) {
+    await logCommunication({
+      trainer_id: trainerId,
+      client_id: clientId,
+      direction: "OUTBOUND",
+      message_type: "TEXT",
+      delivery_status: "sent",
+      metadata: { document_filename: filename, has_caption: !!caption },
+    });
+  }
 }
 
 export async function sendMessage(

@@ -47,7 +47,7 @@ loadEnvLocal()
 // dev server's verifySignature() accepts the same HMAC.
 const DEV_SECRET_FALLBACK = 'dev-local-secret-2026'
 
-const BASE_URL     = `http://localhost:${process.env.PORT ?? 3000}/api/webhooks/whatsapp`
+const BASE_URL     = `http://localhost:${process.env.PORT ?? 3000}/api/webhook/whatsapp`
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ?? ''
 const APP_SECRET   = process.env.WHATSAPP_APP_SECRET || DEV_SECRET_FALLBACK
 

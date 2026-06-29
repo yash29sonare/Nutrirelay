@@ -63,6 +63,7 @@ export const parseMeal = createTool({
   description: 'Breaks down unstructured nutritional intake strings into structured macro estimates (calories, protein, carbs, fat) using a zero-cost local keyword heuristic — no external LLM calls.',
   inputSchema: z.object({
     text: z.string().describe('Raw text description of the meal consumed'),
+    clientContext: z.string().optional().describe('Optional JSON string of client context (goal_type, allergies, dietary_preferences) for context-aware estimation'),
   }),
   outputSchema: z.object({
     calories: z.number(),
@@ -71,7 +72,16 @@ export const parseMeal = createTool({
     fat:      z.number(),
   }),
   execute: async ({ context }: any) => {
-    const { text } = context as { text: string }
+    const { text, clientContext } = context as { text: string; clientContext?: string }
+    let goalType = '', allergies: string[] = [], dietaryPrefs: string[] = []
+    if (clientContext) {
+      try {
+        const parsed = JSON.parse(clientContext)
+        goalType = parsed.goal_type ?? ''
+        allergies = parsed.allergies ?? []
+        dietaryPrefs = parsed.dietary_preferences ?? []
+      } catch {}
+    }
     const input = (text ?? '').toLowerCase().trim()
 
     if (!input) {

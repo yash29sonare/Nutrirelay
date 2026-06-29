@@ -1,0 +1,8 @@
+export const LOW_CALORIE_THRESHOLD = 50
+export const MIN_MACRO_FIELDS = 2
+export const MEAL_GAP_HOURS = 4
+export const MEAL_OVERDUE_HOURS = 4
+export const MAX_REVIEW_PENDING_HOURS = 12
+export const FOLLOW_UP_OVERDUE_HOURS = 24
+export const UNANSWERED_CLARIFICATION_HOURS = 6
+export const RECENT_MEAL_DAYS = 7

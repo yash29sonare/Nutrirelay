@@ -37,16 +37,64 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const { pathname } = request.nextUrl
   const isAuthRoute = pathname === '/login' || pathname === '/register'
   const isDashboardRoute = pathname.startsWith('/dashboard')
+  const isOnboardingRoute = pathname.startsWith('/onboarding')
 
-  // Authenticated users visiting login/register → send to dashboard
-  if (user && isAuthRoute) {
+  // ── Rule 1: No auth → redirect /login ─────────────────────────────
+  if (!user) {
+    if (isDashboardRoute || isOnboardingRoute) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    return response
+  }
+
+  // ── Rule 2: Auth on login/register → redirect /dashboard ────────────
+  if (isAuthRoute) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // Unauthenticated users attempting to access dashboard → send to login
-  // Guard prevents redirect loop: only redirect if not already on an auth route
-  if (!user && isDashboardRoute && !isAuthRoute) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // Only check onboarding for routes that need it
+  if (!isDashboardRoute && !isOnboardingRoute) {
+    return response
+  }
+
+  // ── Rule 3: Fetch trainer row (safe query, fail-open) ──────────────
+  let trainer: { onboarding_status: string } | null = null
+  try {
+    const { data } = await supabase
+      .from('trainers')
+      .select('onboarding_status')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+    trainer = data as { onboarding_status: string } | null
+  } catch {
+    // DB unavailable — fail-open, trainer stays null
+  }
+
+  const onboardingStatus = trainer?.onboarding_status ?? null
+
+  // ── Rules 4-7: Decision matrix ─────────────────────────────────────
+  if (isDashboardRoute) {
+    // Rule 4: No trainers row → redirect to onboarding (recovery path)
+    if (!trainer) {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
+    }
+    // Rule 5: Not active → redirect to onboarding
+    if (onboardingStatus !== 'active') {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
+    }
+    // Rule 7: Active → allow dashboard (fall through)
+  }
+
+  if (isOnboardingRoute) {
+    // Rule 4: No trainers row → allow (recovery page must be reachable)
+    if (!trainer) {
+      return response
+    }
+    // Rule 7: Already active → redirect to dashboard
+    if (onboardingStatus === 'active') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    // Rule 6: Otherwise (invited, onboarding) → allow onboarding
   }
 
   return response

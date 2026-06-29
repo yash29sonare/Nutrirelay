@@ -1,8 +1,9 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { writeAuditLog } from "@/lib/operations/audit";
+import { requireTrainer } from "@/lib/api-auth";
 import type { Database } from "@/shared/types/supabase";
 
 function getServiceDb() {
@@ -10,15 +11,6 @@ function getServiceDb() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-}
-
-async function resolveTrainer(): Promise<string> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.id) throw new Error("Unauthorized — no active session.");
-  return user.id;
 }
 
 async function isPaymentOwnedByTrainer(
@@ -52,7 +44,7 @@ export async function approvePayment(
 ): Promise<{ error?: string }> {
   let trainerId: string;
   try {
-    trainerId = await resolveTrainer();
+    trainerId = await requireTrainer();
   } catch {
     return { error: "Unauthorized." };
   }
@@ -68,6 +60,15 @@ export async function approvePayment(
 
   if (error) return { error: error.message };
 
+  await writeAuditLog({
+    trainer_id: trainerId,
+    actor_id: trainerId,
+    event_type: "payment_approved",
+    entity_type: "upi_payments",
+    entity_id: paymentId,
+    metadata: { payment_status: "verified" },
+  }).catch(() => {});
+
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/queue");
   return {};
@@ -78,7 +79,7 @@ export async function rejectPayment(
 ): Promise<{ error?: string }> {
   let trainerId: string;
   try {
-    trainerId = await resolveTrainer();
+    trainerId = await requireTrainer();
   } catch {
     return { error: "Unauthorized." };
   }
@@ -93,6 +94,15 @@ export async function rejectPayment(
     .eq("id", paymentId);
 
   if (error) return { error: error.message };
+
+  await writeAuditLog({
+    trainer_id: trainerId,
+    actor_id: trainerId,
+    event_type: "payment_rejected",
+    entity_type: "upi_payments",
+    entity_id: paymentId,
+    metadata: { payment_status: "rejected" },
+  }).catch(() => {});
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/queue");

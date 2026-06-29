@@ -1,4 +1,3 @@
-npm warn exec The following package was not found and will be installed: supabase@2.107.0
 export type Json =
   | string
   | number
@@ -126,7 +125,9 @@ export type Database = {
           message_type: string
           processed_at: string | null
           received_at: string
+          retry_count: number
           status: string
+          updated_at: string
           wam_id: string
         }
         Insert: {
@@ -135,7 +136,9 @@ export type Database = {
           message_type: string
           processed_at?: string | null
           received_at?: string
+          retry_count?: number
           status?: string
+          updated_at?: string
           wam_id: string
         }
         Update: {
@@ -144,7 +147,9 @@ export type Database = {
           message_type?: string
           processed_at?: string | null
           received_at?: string
+          retry_count?: number
           status?: string
+          updated_at?: string
           wam_id?: string
         }
         Relationships: []
@@ -2434,11 +2439,849 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          id: string
+          trainer_id: string
+          actor_id: string
+          event_type: string
+          entity_type: string
+          entity_id: string
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          trainer_id: string
+          actor_id: string
+          event_type: string
+          entity_type: string
+          entity_id: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          trainer_id?: string
+          actor_id?: string
+          event_type?: string
+          entity_type?: string
+          entity_id?: string
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_lifecycle: {
+        Row: {
+          id: string
+          trainer_id: string
+          client_id: string
+          status: string
+          source: string
+          invited_at: string
+          accepted_at: string | null
+          archived_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          trainer_id: string
+          client_id: string
+          status?: string
+          source?: string
+          invited_at?: string
+          accepted_at?: string | null
+          archived_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          trainer_id?: string
+          client_id?: string
+          status?: string
+          source?: string
+          invited_at?: string
+          accepted_at?: string | null
+          archived_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_lifecycle_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_lifecycle_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_subscriptions: {
+        Row: {
+          client_id: string
+          created_at: string
+          end_date: string | null
+          id: string
+          renewal_notified_d28: boolean
+          renewal_notified_d30: boolean
+          start_date: string | null
+          status: string
+          tier_type: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          renewal_notified_d28?: boolean
+          renewal_notified_d30?: boolean
+          start_date?: string | null
+          status: string
+          tier_type: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          renewal_notified_d28?: boolean
+          renewal_notified_d30?: boolean
+          start_date?: string | null
+          status?: string
+          tier_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_reviews: {
+        Row: {
+          payment_review_id: string
+          trainer_id: string
+          subscription_id: string
+          status: string
+          proof_metadata: Json
+          review_notes: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          rejection_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          payment_review_id?: string
+          trainer_id: string
+          subscription_id: string
+          status?: string
+          proof_metadata?: Json
+          review_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          rejection_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          payment_review_id?: string
+          trainer_id?: string
+          subscription_id?: string
+          status?: string
+          proof_metadata?: Json
+          review_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          rejection_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_reviews_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_reviews_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "trainer_subscriptions"
+            referencedColumns: ["subscription_id"]
+          },
+        ]
+      }
+      plans: {
+        Row: {
+          plan_id: string
+          display_name: string
+          description: string
+          price_inr: number
+          max_clients: number
+          feature_flags: Json
+        }
+        Insert: {
+          plan_id: string
+          display_name: string
+          description?: string
+          price_inr?: number
+          max_clients?: number
+          feature_flags?: Json
+        }
+        Update: {
+          plan_id?: string
+          display_name?: string
+          description?: string
+          price_inr?: number
+          max_clients?: number
+          feature_flags?: Json
+        }
+        Relationships: []
+      }
+      trainers: {
+        Row: {
+          trainer_id: string
+          auth_user_id: string
+          onboarding_status: string
+          subscription_plan: string
+          subscription_status: string
+          max_clients: number
+          business_name: string | null
+          timezone: string | null
+          country: string | null
+          coaching_style: string | null
+          experience_years: string | null
+          specialties: string[]
+          languages: string[]
+          default_availability: string | null
+          expected_client_count: string | null
+          coaching_goals: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          trainer_id?: string
+          auth_user_id: string
+          onboarding_status?: string
+          subscription_plan?: string
+          subscription_status?: string
+          max_clients?: number
+          business_name?: string | null
+          timezone?: string | null
+          country?: string | null
+          coaching_style?: string | null
+          experience_years?: string | null
+          specialties?: string[]
+          languages?: string[]
+          default_availability?: string | null
+          expected_client_count?: string | null
+          coaching_goals?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          trainer_id?: string
+          auth_user_id?: string
+          onboarding_status?: string
+          subscription_plan?: string
+          subscription_status?: string
+          max_clients?: number
+          business_name?: string | null
+          timezone?: string | null
+          country?: string | null
+          coaching_style?: string | null
+          experience_years?: string | null
+          specialties?: string[]
+          languages?: string[]
+          default_availability?: string | null
+          expected_client_count?: string | null
+          coaching_goals?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trainers_auth_user_id_fkey"
+            columns: ["auth_user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trainer_subscriptions: {
+        Row: {
+          subscription_id: string
+          trainer_id: string
+          plan_id: string
+          status: string
+          started_at: string | null
+          expires_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          subscription_id?: string
+          trainer_id: string
+          plan_id: string
+          status?: string
+          started_at?: string | null
+          expires_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          subscription_id?: string
+          trainer_id?: string
+          plan_id?: string
+          status?: string
+          started_at?: string | null
+          expires_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trainer_subscriptions_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trainer_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["plan_id"]
+          },
+        ]
+      }
+      client_goals: {
+        Row: {
+          client_id: string
+          created_at: string
+          current_weight: number | null
+          goal_status: string
+          goal_type: string
+          id: string
+          starting_weight: number | null
+          target_date: string | null
+          target_weight: number | null
+          trainer_id: string
+          updated_at: string
+          weekly_target_rate: number | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          current_weight?: number | null
+          goal_status?: string
+          goal_type: string
+          id?: string
+          starting_weight?: number | null
+          target_date?: string | null
+          target_weight?: number | null
+          trainer_id: string
+          updated_at?: string
+          weekly_target_rate?: number | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          current_weight?: number | null
+          goal_status?: string
+          goal_type?: string
+          id?: string
+          starting_weight?: number | null
+          target_date?: string | null
+          target_weight?: number | null
+          trainer_id?: string
+          updated_at?: string
+          weekly_target_rate?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_goals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_goals_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_health_profiles: {
+        Row: {
+          age: number | null
+          allergies: string[] | null
+          client_id: string
+          created_at: string
+          diet_type: string | null
+          food_restrictions: string[] | null
+          gender: string | null
+          height_cm: number | null
+          id: string
+          medical_notes: string | null
+          updated_at: string
+          weight_kg: number | null
+        }
+        Insert: {
+          age?: number | null
+          allergies?: string[] | null
+          client_id: string
+          created_at?: string
+          diet_type?: string | null
+          food_restrictions?: string[] | null
+          gender?: string | null
+          height_cm?: number | null
+          id?: string
+          medical_notes?: string | null
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Update: {
+          age?: number | null
+          allergies?: string[] | null
+          client_id?: string
+          created_at?: string
+          diet_type?: string | null
+          food_restrictions?: string[] | null
+          gender?: string | null
+          height_cm?: number | null
+          id?: string
+          medical_notes?: string | null
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_health_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_preferences: {
+        Row: {
+          accept_images: boolean
+          accept_polls: boolean
+          accept_voice_notes: boolean
+          client_id: string
+          created_at: string
+          id: string
+          preferred_language: string
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          accept_images?: boolean
+          accept_polls?: boolean
+          accept_voice_notes?: boolean
+          client_id: string
+          created_at?: string
+          id?: string
+          preferred_language?: string
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          accept_images?: boolean
+          accept_polls?: boolean
+          accept_voice_notes?: boolean
+          client_id?: string
+          created_at?: string
+          id?: string
+          preferred_language?: string
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_preferences_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_compliance_snapshots: {
+        Row: {
+          calculated_at: string
+          client_id: string
+          compliance_score: number | null
+          created_at: string
+          id: string
+          risk_score: number | null
+          status_color: string
+          trainer_id: string
+        }
+        Insert: {
+          calculated_at?: string
+          client_id: string
+          compliance_score?: number | null
+          created_at?: string
+          id?: string
+          risk_score?: number | null
+          status_color?: string
+          trainer_id: string
+        }
+        Update: {
+          calculated_at?: string
+          client_id?: string
+          compliance_score?: number | null
+          created_at?: string
+          id?: string
+          risk_score?: number | null
+          status_color?: string
+          trainer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_compliance_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_compliance_snapshots_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_workout_schedules: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          preferred_checkin_time: string | null
+          rest_days: string[] | null
+          timezone: string
+          updated_at: string
+          workout_time: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          preferred_checkin_time?: string | null
+          rest_days?: string[] | null
+          timezone?: string
+          updated_at?: string
+          workout_time?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          preferred_checkin_time?: string | null
+          rest_days?: string[] | null
+          timezone?: string
+          updated_at?: string
+          workout_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_workout_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      communication_logs: {
+        Row: {
+          client_id: string
+          created_at: string
+          delivery_status: string | null
+          direction: string
+          id: string
+          message_timestamp: string
+          message_type: string
+          metadata: Json
+          trainer_id: string | null
+          wam_id: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          delivery_status?: string | null
+          direction: string
+          id?: string
+          message_timestamp?: string
+          message_type: string
+          metadata?: Json
+          trainer_id?: string | null
+          wam_id?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          delivery_status?: string | null
+          direction?: string
+          id?: string
+          message_timestamp?: string
+          message_type?: string
+          metadata?: Json
+          trainer_id?: string | null
+          wam_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_logs_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monthly_reports: {
+        Row: {
+          client_id: string
+          compliance_score: number | null
+          created_at: string
+          goal_projection_score: number | null
+          id: string
+          predicted_goal_success: boolean | null
+          report_month: string
+          summary: string | null
+          trainer_id: string
+        }
+        Insert: {
+          client_id: string
+          compliance_score?: number | null
+          created_at?: string
+          goal_projection_score?: number | null
+          id?: string
+          predicted_goal_success?: boolean | null
+          report_month: string
+          summary?: string | null
+          trainer_id: string
+        }
+        Update: {
+          client_id?: string
+          compliance_score?: number | null
+          created_at?: string
+          goal_projection_score?: number | null
+          id?: string
+          predicted_goal_success?: boolean | null
+          report_month?: string
+          summary?: string | null
+          trainer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_reports_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trainer_automations: {
+        Row: {
+          created_at: string
+          escalation_enabled: boolean
+          ghosting_detection_enabled: boolean
+          goal_prediction_enabled: boolean
+          id: string
+          meal_reminders_enabled: boolean
+          monthly_reports_enabled: boolean
+          trainer_id: string
+          updated_at: string
+          weekly_reports_enabled: boolean
+        }
+        Insert: {
+          created_at?: string
+          escalation_enabled?: boolean
+          ghosting_detection_enabled?: boolean
+          goal_prediction_enabled?: boolean
+          id?: string
+          meal_reminders_enabled?: boolean
+          monthly_reports_enabled?: boolean
+          trainer_id: string
+          updated_at?: string
+          weekly_reports_enabled?: boolean
+        }
+        Update: {
+          created_at?: string
+          escalation_enabled?: boolean
+          ghosting_detection_enabled?: boolean
+          goal_prediction_enabled?: boolean
+          id?: string
+          meal_reminders_enabled?: boolean
+          monthly_reports_enabled?: boolean
+          trainer_id?: string
+          updated_at?: string
+          weekly_reports_enabled?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trainer_automations_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      engagement_actions: {
+        Row: {
+          id: string
+          trainer_id: string
+          client_id: string
+          action_type: string
+          reason: string
+          status: string
+          payload: Record<string, unknown> | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          trainer_id: string
+          client_id: string
+          action_type: string
+          reason: string
+          status?: string
+          payload?: Record<string, unknown> | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          trainer_id?: string
+          client_id?: string
+          action_type?: string
+          reason?: string
+          status?: string
+          payload?: Record<string, unknown> | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      engagement_events: {
+        Row: {
+          id: string
+          trainer_id: string
+          client_id: string | null
+          action_id: string | null
+          event_type: string
+          event_id: string
+          payload: Record<string, unknown> | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          trainer_id: string
+          client_id?: string | null
+          action_id?: string | null
+          event_type: string
+          event_id: string
+          payload?: Record<string, unknown> | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          trainer_id?: string
+          client_id?: string | null
+          action_id?: string | null
+          event_type?: string
+          event_id?: string
+          payload?: Record<string, unknown> | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      dashboard_client_summaries: {
+        Row: {
+          client_id: string
+          trainer_id: string
+          client_name: string
+          total_meals_logged_today: number
+          total_calories_today: number
+          total_protein_today: number
+          total_carbs_today: number
+          total_fat_today: number
+          active_strike_count: number
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_dashboard_data: {
+        Args: { p_auth_user_id: string }
+        Returns: Json
+      }
       pgmq_read: {
         Args: { qty: number; queue_name: string; vt: number }
         Returns: unknown[]
@@ -2467,116 +3310,116 @@ type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+  ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
-    ? R
-    : never
+  ? R
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
+    DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] &
+    DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+  ? R
+  : never
+  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
+    Insert: infer I
+  }
+  ? I
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Insert: infer I
+  }
+  ? I
+  : never
+  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
+    Update: infer U
+  }
+  ? U
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Update: infer U
+  }
+  ? U
+  : never
+  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Enums"]
+  | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+  : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["CompositeTypes"]
+  | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+  : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never
 
 export const Constants = {
   graphql_public: {

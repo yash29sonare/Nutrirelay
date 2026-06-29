@@ -1,8 +1,10 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { writeAuditLog } from "@/lib/operations/audit";
+import { requireTrainer } from "@/lib/api-auth";
+import { verifyClientOwnership } from "@/lib/ownership";
 import type { Database } from "@/shared/types/supabase";
 
 function getServiceDb() {
@@ -12,43 +14,19 @@ function getServiceDb() {
   );
 }
 
-async function resolveTrainer(): Promise<string> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.id) throw new Error("Unauthorized — no active session.");
-  return user.id;
-}
-
-async function verifyOwnership(
-  db: ReturnType<typeof getServiceDb>,
-  clientId: string,
-  trainerId: string
-): Promise<boolean> {
-  const { data } = await db
-    .from("trainer_clients")
-    .select("client_id")
-    .eq("trainer_id", trainerId)
-    .eq("client_id", clientId)
-    .limit(1)
-    .single();
-  return !!data;
-}
-
 export async function toggleActiveStatus(
   clientId: string,
   currentActive: boolean
 ): Promise<{ error?: string }> {
   let trainerId: string;
   try {
-    trainerId = await resolveTrainer();
+    trainerId = await requireTrainer();
   } catch {
     return { error: "Unauthorized." };
   }
 
   const db = getServiceDb();
-  const owned = await verifyOwnership(db, clientId, trainerId);
+  const owned = await verifyClientOwnership(db, clientId, trainerId);
   if (!owned) return { error: "Client not found or access denied." };
 
   const { error } = await db
@@ -58,6 +36,15 @@ export async function toggleActiveStatus(
     .eq("client_id", clientId);
 
   if (error) return { error: error.message };
+
+  await writeAuditLog({
+    trainer_id: trainerId,
+    actor_id: trainerId,
+    event_type: "roster_toggle_active",
+    entity_type: "trainer_clients",
+    entity_id: clientId,
+    metadata: { new_active: !currentActive },
+  }).catch(() => {});
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/roster");
@@ -69,13 +56,13 @@ export async function unlinkClientFromRoster(
 ): Promise<{ error?: string }> {
   let trainerId: string;
   try {
-    trainerId = await resolveTrainer();
+    trainerId = await requireTrainer();
   } catch {
     return { error: "Unauthorized." };
   }
 
   const db = getServiceDb();
-  const owned = await verifyOwnership(db, clientId, trainerId);
+  const owned = await verifyClientOwnership(db, clientId, trainerId);
   if (!owned) return { error: "Client not found or access denied." };
 
   const { error } = await db
@@ -85,6 +72,15 @@ export async function unlinkClientFromRoster(
     .eq("client_id", clientId);
 
   if (error) return { error: error.message };
+
+  await writeAuditLog({
+    trainer_id: trainerId,
+    actor_id: trainerId,
+    event_type: "roster_unlink",
+    entity_type: "trainer_clients",
+    entity_id: clientId,
+    metadata: { action: "unlinked" },
+  }).catch(() => {});
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/roster");

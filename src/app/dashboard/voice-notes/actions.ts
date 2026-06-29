@@ -1,8 +1,9 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { writeAuditLog } from "@/lib/operations/audit";
+import { requireTrainer } from "@/lib/api-auth";
 import type { Database } from "@/shared/types/supabase";
 
 function getServiceDb() {
@@ -10,15 +11,6 @@ function getServiceDb() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-}
-
-async function resolveTrainer(): Promise<string> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.id) throw new Error("Unauthorized — no active session.");
-  return user.id;
 }
 
 async function isNoteOwnedByTrainer(
@@ -55,7 +47,7 @@ export async function resolveWithTranscript(
 
   let trainerId: string;
   try {
-    trainerId = await resolveTrainer();
+    trainerId = await requireTrainer();
   } catch {
     return { error: "Unauthorized." };
   }
@@ -71,6 +63,15 @@ export async function resolveWithTranscript(
 
   if (error) return { error: error.message };
 
+  await writeAuditLog({
+    trainer_id: trainerId,
+    actor_id: trainerId,
+    event_type: "voice_note_resolved",
+    entity_type: "voice_notes",
+    entity_id: noteId,
+    metadata: { action: "resolve_with_transcript" },
+  }).catch(() => {});
+
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/voice-notes");
   return {};
@@ -81,7 +82,7 @@ export async function retranscribeNote(
 ): Promise<{ error?: string }> {
   let trainerId: string;
   try {
-    trainerId = await resolveTrainer();
+    trainerId = await requireTrainer();
   } catch {
     return { error: "Unauthorized." };
   }
@@ -114,6 +115,15 @@ export async function retranscribeNote(
   } catch (err) {
     return { error: (err as Error).message };
   }
+
+  await writeAuditLog({
+    trainer_id: trainerId,
+    actor_id: trainerId,
+    event_type: "voice_note_retranscribe",
+    entity_type: "voice_notes",
+    entity_id: noteId,
+    metadata: { action: "retranscribe_requested" },
+  }).catch(() => {});
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/voice-notes");

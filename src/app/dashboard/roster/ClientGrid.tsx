@@ -4,8 +4,14 @@ import { useEffect, useState, useRef, useTransition } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { toggleActiveStatus, unlinkClientFromRoster } from "./actions";
-import { AlertTriangle, ChevronRight, ChevronLeft } from "lucide-react";
+import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell } from "@/components/ui/Table";
+import { Pagination } from "@/components/ui/Pagination";
+import { InlineNotice } from "@/components/ui/InlineNotice";
+import { AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Badge } from "@/components/ui/Badge";
 
 export interface RosterRow {
   client_id:                string;
@@ -97,25 +103,25 @@ export function ClientGrid({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <input
+        <Input
           type="search"
           placeholder="Search clients…"
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           aria-label="Search clients by name"
-          className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+          className="flex-1"
         />
-        <select
+        <Select
           value={currentStatus}
           onChange={(e) => handleStatusChange(e.target.value)}
           aria-label="Filter by status"
-          className="px-3 py-2 text-sm rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-brand-500/40"
-        >
-          <option value="all">All clients</option>
-          <option value="risk">At risk (2+ strikes)</option>
-          <option value="compliant">Compliant (logged today)</option>
-          <option value="inactive">Inactive (no log today)</option>
-        </select>
+          options={[
+            { value: "all", label: "All clients" },
+            { value: "risk", label: "At risk (2+ strikes)" },
+            { value: "compliant", label: "Compliant (logged today)" },
+            { value: "inactive", label: "Inactive (no log today)" },
+          ]}
+        />
       </div>
 
       {/* Grid */}
@@ -128,132 +134,81 @@ export function ClientGrid({
           </CardContent>
         </Card>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--surface-border)]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--surface-border)] bg-[var(--surface-raised)]">
-                {["Client", "Meals today", "Calories", "Status", "Actions"].map(
-                  (col) => (
-                    <th
-                      key={col}
-                      className="px-5 py-3 text-left text-xs font-medium text-[var(--muted)] whitespace-nowrap"
-                    >
-                      {col}
-                    </th>
-                  )
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--surface-border)]">
-              {rows.map((row) => {
-                const busy  = loadingId === row.client_id;
-                const atRisk = row.active_strike_count >= 2;
+        <Table>
+          <TableHeader>
+            {["Client", "Meals today", "Calories", "Status", "Actions"].map((col) => (
+              <TableHeaderCell key={col}>{col}</TableHeaderCell>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const busy  = loadingId === row.client_id;
+              const atRisk = row.active_strike_count >= 2;
 
-                return (
-                  <tr
-                    key={row.client_id}
-                    className="bg-[var(--background)] hover:bg-[var(--surface-overlay)] transition-colors duration-100"
-                  >
-                    <td className="px-5 py-3">
+              return (
+                <TableRow key={row.client_id}>
+                  <TableCell>
+                    <Link
+                      href={`/dashboard/clients/${row.client_id}`}
+                      className="font-medium text-[var(--foreground)] hover:text-brand-500 transition-colors"
+                    >
+                      {row.client_name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="tabular-nums text-[var(--foreground)]">
+                    {row.total_meals_logged_today}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-[var(--foreground)]">
+                    {row.total_calories_today} kcal
+                  </TableCell>
+                  <TableCell>
+                    {atRisk ? (
+                      <Badge variant="danger">
+                        <AlertTriangle size={11} />
+                        {row.active_strike_count} strikes
+                      </Badge>
+                    ) : row.total_meals_logged_today > 0 ? (
+                      <Badge variant="brand">
+                        On track
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">
+                        No log today
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
                       <Link
                         href={`/dashboard/clients/${row.client_id}`}
-                        className="font-medium text-[var(--foreground)] hover:text-brand-500 transition-colors"
+                        className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] underline underline-offset-2"
                       >
-                        {row.client_name}
+                        View
                       </Link>
-                    </td>
-                    <td className="px-5 py-3 tabular-nums text-[var(--foreground)]">
-                      {row.total_meals_logged_today}
-                    </td>
-                    <td className="px-5 py-3 tabular-nums text-[var(--foreground)]">
-                      {row.total_calories_today} kcal
-                    </td>
-                    <td className="px-5 py-3">
-                      {atRisk ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-500/10 text-red-500">
-                          <AlertTriangle size={11} />
-                          {row.active_strike_count} strikes
-                        </span>
-                      ) : row.total_meals_logged_today > 0 ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-500/10 text-brand-600 dark:text-brand-400">
-                          On track
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-[var(--surface-overlay)] text-[var(--muted)]">
-                          No log today
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/dashboard/clients/${row.client_id}`}
-                          className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] underline underline-offset-2"
-                        >
-                          View
-                        </Link>
-                        <button
-                          onClick={() => handleUnlink(row.client_id)}
-                          disabled={busy}
-                          className="text-xs text-red-500/60 hover:text-red-500 transition-colors disabled:opacity-50"
-                        >
-                          {busy ? "…" : "Remove"}
-                        </button>
-                      </div>
-                      {errors[row.client_id] && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {errors[row.client_id]}
-                        </p>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      <button
+                        onClick={() => handleUnlink(row.client_id)}
+                        disabled={busy}
+                        className="text-xs text-red-500/60 hover:text-red-500 transition-colors disabled:opacity-50"
+                      >
+                        {busy ? "…" : "Remove"}
+                      </button>
+                    </div>
+                    {errors[row.client_id] && (
+                      <InlineNotice>{errors[row.client_id]}</InlineNotice>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2">
-          <p className="text-xs text-[var(--muted)]">
-            Page {currentPage} of {totalPages}
-          </p>
-          <div className="flex items-center gap-2">
-            <Link
-              href={buildUrl(pathname, {
-                search,
-                status: currentStatus,
-                page: Math.max(1, currentPage - 1),
-              })}
-              aria-disabled={currentPage <= 1}
-              className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border border-[var(--surface-border)] transition-colors ${
-                currentPage <= 1
-                  ? "opacity-40 pointer-events-none"
-                  : "hover:bg-[var(--surface-overlay)]"
-              } text-[var(--foreground)]`}
-            >
-              <ChevronLeft size={12} /> Prev
-            </Link>
-            <Link
-              href={buildUrl(pathname, {
-                search,
-                status: currentStatus,
-                page: Math.min(totalPages, currentPage + 1),
-              })}
-              aria-disabled={currentPage >= totalPages}
-              className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border border-[var(--surface-border)] transition-colors ${
-                currentPage >= totalPages
-                  ? "opacity-40 pointer-events-none"
-                  : "hover:bg-[var(--surface-overlay)]"
-              } text-[var(--foreground)]`}
-            >
-              Next <ChevronRight size={12} />
-            </Link>
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        buildUrl={(page) => buildUrl(pathname, { search, status: currentStatus, page })}
+      />
     </div>
   );
 }

@@ -2,8 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { approvePayment, rejectPayment } from "./actions";
+import { formatDate, formatCurrency } from "@/lib/format";
+import { InlineNotice } from "@/components/ui/InlineNotice";
+import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell } from "@/components/ui/Table";
 import { CheckCircle, XCircle, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 
 export interface PaymentRow {
   id: string;
@@ -16,14 +20,6 @@ export interface PaymentRow {
 
 interface PaymentGridProps {
   initialRows: PaymentRow[];
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 export function PaymentGrid({ initialRows }: PaymentGridProps) {
@@ -73,90 +69,75 @@ export function PaymentGrid({ initialRows }: PaymentGridProps) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--surface-border)]">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-[var(--surface-border)] bg-[var(--surface-raised)]">
-            {["Client", "UTR Number", "Amount", "Submitted", "Receipt", "Actions"].map(
-              (col) => (
-                <th
-                  key={col}
-                  className="px-5 py-3 text-left text-xs font-medium text-[var(--muted)] whitespace-nowrap"
-                >
-                  {col}
-                </th>
-              )
-            )}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[var(--surface-border)]">
-          {rows.map((row) => {
-            const busy = loadingId === row.id;
-            return (
-              <tr
-                key={row.id}
-                className="bg-[var(--background)] hover:bg-[var(--surface-overlay)] transition-colors duration-100"
-              >
-                <td className="px-5 py-3 font-medium text-[var(--foreground)] whitespace-nowrap">
-                  {row.client_name}
-                </td>
-                <td className="px-5 py-3 font-mono text-xs text-[var(--foreground)] whitespace-nowrap">
-                  {row.utr_number}
-                </td>
-                <td className="px-5 py-3 tabular-nums text-[var(--foreground)] whitespace-nowrap">
-                  ₹{row.amount.toLocaleString("en-IN")}
-                </td>
-                <td className="px-5 py-3 text-[var(--muted)] whitespace-nowrap text-xs">
-                  {formatDate(row.created_at)}
-                </td>
-                <td className="px-5 py-3">
-                  {row.billing_screenshot_url ? (
-                    <a
-                      href={row.billing_screenshot_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600"
-                    >
-                      View <ExternalLink size={11} />
-                    </a>
-                  ) : (
-                    <span className="text-xs text-[var(--muted)]">No receipt</span>
-                  )}
-                </td>
-                <td className="px-5 py-3">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleApprove(row.id)}
-                      disabled={busy}
-                      aria-label={`Approve payment ${row.utr_number}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {busy ? (
-                        <span className="w-3 h-3 rounded-full border-2 border-brand-500/30 border-t-brand-500 animate-spin" />
-                      ) : (
-                        <CheckCircle size={12} />
-                      )}
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleReject(row.id)}
-                      disabled={busy}
-                      aria-label={`Reject payment ${row.utr_number}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <XCircle size={12} />
-                      Reject
-                    </button>
-                  </div>
-                  {errors[row.id] && (
-                    <p className="mt-1 text-xs text-red-500">{errors[row.id]}</p>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <Table>
+      <TableHeader>
+        {["Client", "UTR Number", "Amount", "Submitted", "Receipt", "Actions"].map((col) => (
+          <TableHeaderCell key={col}>{col}</TableHeaderCell>
+        ))}
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => {
+          const busy = loadingId === row.id;
+          return (
+            <TableRow key={row.id}>
+              <TableCell className="font-medium text-[var(--foreground)] whitespace-nowrap">
+                {row.client_name}
+              </TableCell>
+              <TableCell className="font-mono text-xs text-[var(--foreground)] whitespace-nowrap">
+                {row.utr_number}
+              </TableCell>
+              <TableCell className="tabular-nums text-[var(--foreground)] whitespace-nowrap">
+                {formatCurrency(row.amount)}
+              </TableCell>
+              <TableCell className="text-[var(--muted)] whitespace-nowrap text-xs">
+                {formatDate(row.created_at)}
+              </TableCell>
+              <TableCell>
+                {row.billing_screenshot_url ? (
+                  <a
+                    href={row.billing_screenshot_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600"
+                  >
+                    View <ExternalLink size={11} />
+                  </a>
+                ) : (
+                  <span className="text-xs text-[var(--muted)]">No receipt</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="brand"
+                    size="sm"
+                    onClick={() => handleApprove(row.id)}
+                    disabled={busy}
+                    aria-label={`Approve payment ${row.utr_number}`}
+                    icon={busy ? undefined : <CheckCircle size={12} />}
+                    loading={busy}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => handleReject(row.id)}
+                    disabled={busy}
+                    aria-label={`Reject payment ${row.utr_number}`}
+                    icon={<XCircle size={12} />}
+                  >
+                    Reject
+                  </Button>
+                </div>
+                {errors[row.id] && (
+                  <InlineNotice>{errors[row.id]}</InlineNotice>
+                )}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }

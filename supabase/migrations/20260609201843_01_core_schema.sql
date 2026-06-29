@@ -143,24 +143,29 @@ CREATE TABLE IF NOT EXISTS public.food_logs (
 -- -----------------------------------------------------------------------------
 
 -- Auth sync: mirror new auth.users rows into public.profiles
-CREATE OR REPLACE TRIGGER on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- updated_at automation on every public table
-CREATE OR REPLACE TRIGGER set_profiles_updated_at
+DROP TRIGGER IF EXISTS set_profiles_updated_at ON public.profiles;
+CREATE TRIGGER set_profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-CREATE OR REPLACE TRIGGER set_meal_plans_updated_at
+DROP TRIGGER IF EXISTS set_meal_plans_updated_at ON public.meal_plans;
+CREATE TRIGGER set_meal_plans_updated_at
   BEFORE UPDATE ON public.meal_plans
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-CREATE OR REPLACE TRIGGER set_meal_slots_updated_at
+DROP TRIGGER IF EXISTS set_meal_slots_updated_at ON public.meal_slots;
+CREATE TRIGGER set_meal_slots_updated_at
   BEFORE UPDATE ON public.meal_slots
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-CREATE OR REPLACE TRIGGER set_food_logs_updated_at
+DROP TRIGGER IF EXISTS set_food_logs_updated_at ON public.food_logs;
+CREATE TRIGGER set_food_logs_updated_at
   BEFORE UPDATE ON public.food_logs
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 

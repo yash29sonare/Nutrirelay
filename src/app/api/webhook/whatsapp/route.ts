@@ -17,7 +17,7 @@ function getServiceClient() {
 // ── GET — Meta webhook verification handshake ─────────────────────────────────
 export async function GET(req: Request): Promise<Response> {
   if (!process.env.WHATSAPP_VERIFY_TOKEN) {
-    console.error("[webhook/whatsapp] WHATSAPP_VERIFY_TOKEN is not set");
+    console.error("[ALERT] WHATSAPP_VERIFY_TOKEN is not set");
     return new Response("Server misconfiguration", { status: 500 });
   }
 
@@ -42,19 +42,24 @@ export async function POST(req: Request): Promise<Response> {
   try {
     rawBody = await req.text();
   } catch (err) {
-    console.error("[webhook/whatsapp] failed to read request body:", (err as Error).message);
+    console.error("[ALERT] failed to read request body:", (err as Error).message);
     return new Response("OK", { status: 200 });
   }
 
   try {
     // ── 1. HMAC signature verification ─────────────────────────────────────
-    const signature = req.headers.get("x-hub-signature-256");
-    if (!verifySignature(rawBody, signature)) {
-      console.error(
-        "[webhook/whatsapp] signature failure — header:",
-        signature ?? "[missing]"
-      );
-      return new Response("Unauthorized", { status: 401 });
+    console.log("[TRACE] webhook received");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[TRACE] webhook signature skipped");
+    } else {
+      const signature = req.headers.get("x-hub-signature-256");
+      if (!verifySignature(rawBody, signature)) {
+        console.error(
+          "[ALERT] signature failure — header:",
+          signature ?? "[missing]"
+        );
+        return new Response("Unauthorized", { status: 401 });
+      }
     }
 
     // ── 2. Parse JSON payload ───────────────────────────────────────────────
@@ -63,7 +68,7 @@ export async function POST(req: Request): Promise<Response> {
       body = JSON.parse(rawBody);
     } catch {
       // Malformed JSON — ack to Meta to stop retries
-      console.warn("[webhook/whatsapp] malformed JSON payload, acking to stop retries");
+      console.warn("[ALERT] malformed JSON payload, acking to stop retries");
       return new Response("OK", { status: 200 });
     }
 
@@ -79,30 +84,44 @@ export async function POST(req: Request): Promise<Response> {
 
     // ── 4. Parse typed message ──────────────────────────────────────────────
     const parsed = parseInboundMessage(body);
+
+    console.log("[TRACE]", JSON.stringify(body, null, 2));
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[TRACE] parsed result:", parsed);
+
+      if (!parsed) {
+        console.log("[TRACE] DROP: parseInboundMessage returned null (message ignored)");
+      }
+    }
+
     if (!parsed) {
       // Unrecognised message type — ack to prevent retry storm
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[TRACE] EARLY EXIT: message ignored before queueing");
+      }
       return new Response("OK", { status: 200 });
     }
 
     // ── 5. Build queue envelope ─────────────────────────────────────────────
     const envelope = {
-      wam_id:            parsed.whatsapp_message_id,
-      client_phone:      parsed.from,
+      wam_id: parsed.whatsapp_message_id,
+      client_phone: parsed.from,
       message_timestamp: parsed.timestamp,
-      message_type:      parsed.type,
+      message_type: parsed.type,
       message_text:
         parsed.type === "text"
           ? parsed.text
           : parsed.type === "interactive"
-          ? parsed.button_reply_title
-          : null,
+            ? parsed.button_reply_title
+            : null,
       media_id:
         parsed.type === "audio" || parsed.type === "image"
           ? parsed.media_id
           : null,
       button_reply_id:
         parsed.type === "interactive" ? parsed.button_reply_id : null,
-      raw_entry:   (body as any)?.entry?.[0] ?? null,
+      raw_entry: (body as any)?.entry?.[0] ?? null,
       enqueued_at: new Date().toISOString(),
     };
 
@@ -110,17 +129,15 @@ export async function POST(req: Request): Promise<Response> {
     const supabase = getServiceClient();
     const { error: queueError } = await supabase.rpc("pgmq_send", {
       queue_name: "whatsapp_incoming_queue",
-      message:    envelope,
+      message: envelope,
     });
 
     if (queueError) {
-      console.error(
-        "[webhook/whatsapp] pgmq enqueue error for wam_id",
-        envelope.wam_id,
-        queueError.message
-      );
-      // Still return 200 — Meta must not retry; the error is ours to handle
+      console.error("[ALERT] wam_id:", envelope.wam_id, "reason: pgmq_send_failed", queueError.message);
+      return new Response("Internal Server Error", { status: 500, headers: { "Content-Type": "text/plain" } });
     }
+
+    console.log("[EVENT] outcome=ingestion wam_id:", envelope.wam_id);
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -129,7 +146,7 @@ export async function POST(req: Request): Promise<Response> {
 
   } catch (err) {
     // Catch-all — never let an unhandled exception return a 5xx to Meta
-    console.error("[webhook/whatsapp] unhandled error:", (err as Error).message);
+    console.error("[ALERT] unhandled error:", (err as Error).message);
     return new Response(JSON.stringify({ ok: true }), {
       status: 202,
       headers: { "Content-Type": "application/json" },

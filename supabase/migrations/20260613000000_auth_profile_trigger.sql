@@ -10,7 +10,22 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+  _raw_role  TEXT;
+  _role      public.role_type;
 BEGIN
+  _raw_role := NEW.raw_user_meta_data ->> 'role';
+
+  BEGIN
+    _role := _raw_role::public.role_type;
+  EXCEPTION WHEN invalid_text_representation OR OTHERS THEN
+    _role := 'client';
+  END;
+
+  IF _role IS NULL THEN
+    _role := 'client';
+  END IF;
+
   INSERT INTO public.profiles (
     id,
     full_name,
@@ -22,8 +37,8 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
-    NULL,
-    'trainer',
+    NEW.raw_user_meta_data ->> 'phone_number',
+    _role,
     NOW(),
     NOW()
   )

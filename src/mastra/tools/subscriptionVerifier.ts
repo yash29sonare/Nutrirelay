@@ -57,7 +57,8 @@ export const subscriptionVerifier = createTool({
           : ('free' as const)
 
       return { isActive: true, tier }
-    } catch {
+    } catch (err) {
+      console.error('[ALERT] subscriptionVerifier: unexpected error', (err as Error).message ?? err)
       return { isActive: false, tier: 'expired' as const }
     }
   },

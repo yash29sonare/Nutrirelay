@@ -87,6 +87,19 @@ export async function evaluateMealNudges(): Promise<void> {
     const clientId = String(plan.client_id);
     const timezone = DEFAULT_TZ;
 
+    // Resolve tenant owner (trainer_id) for template sending
+    const { data: tcRow, error: tcError } = await db
+      .from("trainer_clients")
+      .select("trainer_id")
+      .eq("client_id", clientId)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (tcError || !tcRow) continue;
+
+    const trainerId = String(tcRow.trainer_id);
+
     if (!slot.scheduled_time) continue;
 
     const slotMinutes = parseScheduledTime(slot.scheduled_time);
@@ -113,12 +126,14 @@ export async function evaluateMealNudges(): Promise<void> {
 
     // No log found — send nudge
     try {
-      await sendTemplateMessage(phone, "meal_confirmation", [
+      await sendTemplateMessage(trainerId, phone, "meal_confirmation", [
         clientName,
         String(slot.name),
         String(slot.target_calories ?? "—"),
       ]);
-      console.log(`[meal-nudges] nudge sent to ${phone} for slot "${slot.name}"`);
+      console.log(
+        `[meal-nudges] nudge sent to ${phone} for slot "${slot.name}"`
+      );
     } catch (err) {
       console.error(
         `[meal-nudges] failed to send nudge to ${phone}:`,

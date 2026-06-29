@@ -1,8 +1,16 @@
 /**
- * Strict TypeScript data contracts for the trainer dashboard.
- * Maps 1-to-1 against the `dashboard_client_summaries` Postgres view.
+ * ════════════════════════════════════════════════════════════
+ * Dashboard Contract — SINGLE SOURCE OF TRUTH (v1)
+ * ════════════════════════════════════════════════════════════
+ *
+ * Data flow:
+ *   RPC → mapDashboardData() → DashboardDataDTO → UI
+ *
+ * One mapping function. One DTO. One RPC call.
+ * ════════════════════════════════════════════════════════════
  */
 
+// ── Client summary (view row) ──────────────────────────────────────
 export interface ClientSummary {
   client_id:                string;
   client_name:              string;
@@ -15,26 +23,64 @@ export interface ClientSummary {
   active_strike_count:      number;
 }
 
-export interface DashboardMetrics {
-  totalClients:          number;
-  atRiskClients:         number;
-  globalComplianceRate:  number;
+// ── Trainer block ──────────────────────────────────────────────────
+export interface TrainerInfo {
+  id:                string;
+  auth_user_id:      string;
+  onboarding_status: string;
+  business_name:     string | null;
+  timezone:          string | null;
+  country:           string | null;
 }
 
-/**
- * Derives DashboardMetrics from a set of ClientSummary rows.
- * atRiskClients  = clients with ≥ 1 active strike.
- * globalComplianceRate = % of clients who logged ≥ 1 meal today.
- */
-export function deriveDashboardMetrics(clients: ClientSummary[]): DashboardMetrics {
-  const total               = clients.length;
-  const atRisk              = clients.filter((c) => c.active_strike_count > 0).length;
-  const loggedToday         = clients.filter((c) => c.total_meals_logged_today > 0).length;
-  const globalComplianceRate = total > 0 ? Math.round((loggedToday / total) * 100) : 0;
+// ── Client activity entry ──────────────────────────────────────────
+export interface ClientActivity {
+  client_id:      string;
+  client_name:    string;
+  meals_logged:   number;
+  last_logged_at: string | null;
+  total_calories: number;
+  total_protein:  number;
+}
 
-  return {
-    totalClients:         total,
-    atRiskClients:        atRisk,
-    globalComplianceRate,
+// ── Compliance entry (computed from raw logger count) ──────────────
+export interface ComplianceEntry {
+  date:            string;
+  compliance_rate: number;
+}
+
+// ── Single canonical DTO (RPC → mapper → UI) ──────────────────────
+export interface DashboardDataDTO {
+  version: 'v1';
+  trainer: TrainerInfo;
+  clients: ClientSummary[];
+  metrics: {
+    activeClients:   number;
+    complianceRate:  number;
+    weeklyProgress:  number;
+    atRiskClients:   number;
+  };
+  trends: {
+    complianceOverTime: ComplianceEntry[];
+    clientActivity:     ClientActivity[];
   };
 }
+
+// ── Error model ────────────────────────────────────────────────────
+export type DashboardErrorCode =
+  | "TRAINER_NOT_FOUND"
+  | "TEMPORARY_DB_FAILURE"
+  | "PERMANENT_DB_ERROR";
+
+export interface DashboardError {
+  code:      DashboardErrorCode;
+  message:   string;
+  timestamp: string;
+}
+
+// ── Dashboard result (discriminated union, no fallback DTO) ────────
+export type DashboardResult =
+  | { success: true;  data: DashboardDataDTO }
+  | { success: false; error: DashboardError };
+
+

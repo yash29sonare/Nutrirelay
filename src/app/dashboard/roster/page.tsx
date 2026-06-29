@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Card, CardContent } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { ClientGrid, type RosterRow } from "./ClientGrid";
 import type { ClientSummary } from "@/types/dashboard";
 
@@ -85,24 +87,16 @@ export default async function RosterPage({
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-6xl">
-      <div>
-        <h1 className="text-xl font-semibold text-[var(--foreground)]">
-          Client Roster
-        </h1>
-        <p className="text-sm text-[var(--muted)] mt-0.5">
-          {total} client{total !== 1 ? "s" : ""} in your roster
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Client Roster"
+        description={`${total} client${total !== 1 ? "s" : ""} in your roster`}
+      />
 
       {!trainerId ? (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <p className="text-sm text-[var(--muted)]">
-              Sign in to view your roster.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="Sign in to view your roster."
+        />
       ) : (
         <Suspense
           fallback={
@@ -118,6 +112,6 @@ export default async function RosterPage({
           />
         </Suspense>
       )}
-    </div>
+    </PageContainer>
   );
 }

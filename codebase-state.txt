@@ -1,0 +1,60 @@
+# FORTRESS FITNESS — ANCHORED EXECUTION SUMMARY
+## Last Updated: Phase 14 (True Event Sourcing)
+
+────────────────────────────────────────
+## ARCHITECTURE (3 LAYERS)
+────────────────────────────────────────
+
+1. **EVENT STORE (Source of Truth)** — `engagement_events` immutable append-only log
+2. **STATE PROJECTION (Derived)** — `buildEngagementState(events)` pure reducer
+3. **AI (Advisory)** — `generateInsightsFromEvents(events)` read-only analysis
+
+### Flow (Dashboard Load)
+```
+getDashboardData()
+  → getEvents(trainerId)                # events = truth
+  → buildEngagementState(events)        # pure projection
+  → generateActionQueue(dto, insights)  # deterministic, no DB
+  → filterByProjection(runtime, proj)   # compare vs events
+  → appendEvents(ACTION_CREATED)        # new actions only
+  → getTrainerDailyFeed(filtered)       # render
+  → computeOutcomeFromEvents(events)    # derived analytics
+  → generateInsightsFromEvents(events)  # read-only AI
+```
+
+### Guarantees
+- Events = ONLY source of truth — no dual writes
+- `buildEngagementState()` is a deterministic reducer — replay always produces identical state
+- `engagement_actions` table removed from data flow — events only
+- `appendEvents()` uses `event_id` UNIQUE constraint for idempotent retries
+- AI never writes to DB — `generateInsightsFromEvents()` is pure computation
+- No hidden reconciliation logic — `filterByProjection()` is a simple map lookup
+
+────────────────────────────────────────
+## FILES
+────────────────────────────────────────
+
+### New
+| File | Purpose |
+|------|---------|
+| `src/lib/engagement/engagementProjection.ts` | `buildEngagementState(events)` — pure reducer over event stream. `filterByProjection(actions, projection)` — compares runtime actions against projected state |
+
+### Modified
+| File | Change |
+|------|--------|
+| `src/types/engagement-events.ts` | Event types renamed to spec: `ACTION_CREATED`, `ACTION_COMPLETED`, `ACTION_IGNORED`, `ACTION_SNOOZED`, `TRAINER_NOTE_ADDED`, `CLIENT_STATE_UPDATED`, `ACTION_SUPPRESSED`. Added `event_id` for idempotency |
+| `supabase/migrations/20260701000000_engagement_events.sql` | Added `event_id TEXT NOT NULL` column + unique index for idempotent inserts |
+| `src/lib/events/engagementEventStore.ts` | Simplified to `appendEvents()` + `getEvents()` + `getClientEvents()`. Uses `.upsert({onConflict:"event_id", ignoreDuplicates:true})` for safe retry |
+| `src/lib/engagement/engagementEngine.ts` | Removed `rebuildEngagementState()` and `reconcileWithPersistedActions()` — both superseded by projection module |
+| `src/lib/outcomes/eventOutcomeEngine.ts` | Updated event type references to new names |
+| `src/lib/ai/engagementAI.ts` | Updated event type references to new names |
+| `src/app/dashboard/page.tsx` | Events-only flow — no `getActiveActions`, no `upsertActions`, no `engagementRepository` dependency |
+
+### Removed Dependencies
+- `engagementRepository.ts` no longer called from dashboard flow (retained for API endpoint use)
+- `PersistedAction` type not imported by engine or page
+
+### Validations
+- `npx tsc --noEmit` ✓
+- `npm run ai:enforce` ✓
+- `npx next build` ✓ (23.7s)

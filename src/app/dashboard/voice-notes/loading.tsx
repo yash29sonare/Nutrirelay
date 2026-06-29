@@ -1,14 +1,10 @@
 import { Card, CardContent } from "@/components/ui/Card";
-
-function PulseLine({ className = "" }: { className?: string }) {
-  return (
-    <div className={`animate-pulse rounded-md bg-[var(--surface-overlay)] ${className}`} />
-  );
-}
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PulseLine } from "@/components/ui/LoadingState";
 
 export default function VoiceNotesLoading() {
   return (
-    <div className="px-6 py-6 space-y-6 max-w-5xl">
+    <PageContainer className="max-w-5xl">
       <div className="space-y-1.5">
         <PulseLine className="h-6 w-48" />
         <PulseLine className="h-4 w-56" />
@@ -49,6 +45,6 @@ export default function VoiceNotesLoading() {
           </CardContent>
         </Card>
       ))}
-    </div>
+    </PageContainer>
   );
 }

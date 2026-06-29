@@ -78,23 +78,28 @@ CREATE TABLE IF NOT EXISTS public.weekly_reports (
 -- SECTION 3: Trigger Bindings — updated_at automation
 -- -----------------------------------------------------------------------------
 
-CREATE OR REPLACE TRIGGER set_subscriptions_updated_at
+DROP TRIGGER IF EXISTS set_subscriptions_updated_at ON public.subscriptions;
+CREATE TRIGGER set_subscriptions_updated_at
   BEFORE UPDATE ON public.subscriptions
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-CREATE OR REPLACE TRIGGER set_upi_payments_updated_at
+DROP TRIGGER IF EXISTS set_upi_payments_updated_at ON public.upi_payments;
+CREATE TRIGGER set_upi_payments_updated_at
   BEFORE UPDATE ON public.upi_payments
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-CREATE OR REPLACE TRIGGER set_voice_notes_updated_at
+DROP TRIGGER IF EXISTS set_voice_notes_updated_at ON public.voice_notes;
+CREATE TRIGGER set_voice_notes_updated_at
   BEFORE UPDATE ON public.voice_notes
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-CREATE OR REPLACE TRIGGER set_strike_log_updated_at
+DROP TRIGGER IF EXISTS set_strike_log_updated_at ON public.strike_log;
+CREATE TRIGGER set_strike_log_updated_at
   BEFORE UPDATE ON public.strike_log
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-CREATE OR REPLACE TRIGGER set_weekly_reports_updated_at
+DROP TRIGGER IF EXISTS set_weekly_reports_updated_at ON public.weekly_reports;
+CREATE TRIGGER set_weekly_reports_updated_at
   BEFORE UPDATE ON public.weekly_reports
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 

@@ -1,8 +1,7 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows'
-import { generateText } from 'ai'
+import { runAI } from '@/ai/aiGateway'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
-import { geminiModels } from '../config'
 
 function getDb() {
   return createClient(
@@ -170,23 +169,17 @@ const extractCustomMealStep = createStep({
     }
 
     try {
-      const { text: raw } = await generateText({
-        model: geminiModels.primary,
-        messages: [
-          {
-            role:    'system',
-            content: 'You are a nutritional data extraction engine. Parse Hinglish (Hindi-English code-switched) food descriptions into macros. Return only valid JSON.',
-          },
-          {
-            role:    'user',
-            content: `Parse this Hinglish meal description and return JSON:
+      // AI-GATEWAY-ENFORCED
+      const { text: raw } = await runAI({
+        system: 'You are a nutritional data extraction engine. Parse Hinglish (Hindi-English code-switched) food descriptions into macros. Return only valid JSON.',
+        prompt: `Parse this Hinglish meal description and return JSON:
 "${text}"
 
 Return exactly:
 {"meal_description":"<English summary>","protein":<grams>,"carbohydrates":<grams>,"fat":<grams>,"calories":<kcal>}
 If amounts are unclear, use typical Indian serving estimates.`,
-          },
-        ],
+        feature: 'meal-logging',
+        workflow: 'postMealPollWorkflow',
       })
 
       const clean  = (raw ?? '').replace(/```json|```/g, '').trim()

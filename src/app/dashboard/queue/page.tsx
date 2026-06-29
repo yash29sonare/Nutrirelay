@@ -1,6 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent } from "@/components/ui/Card";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { DashboardGrid } from "@/components/layout/DashboardGrid";
+import { DashboardSection } from "@/components/layout/DashboardSection";
 import { PaymentGrid, type PaymentRow } from "./PaymentGrid";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { CreditCard, IndianRupee, Clock } from "lucide-react";
 import type { Database } from "@/shared/types/supabase";
 
@@ -75,18 +80,15 @@ export default async function QueuePage() {
     rows.length > 0 ? daysSince(rows[0].created_at) : null;
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-6xl">
-      <div>
-        <h1 className="text-xl font-semibold text-[var(--foreground)]">
-          Payment Queue
-        </h1>
-        <p className="text-sm text-[var(--muted)] mt-0.5">
-          Verify pending UPI payments from your clients.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Payment Queue"
+        description="Verify pending UPI payments from your clients."
+      />
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <DashboardSection title="Payment metrics">
+        <DashboardGrid columns={3}>
         <Card>
           <CardContent className="flex items-center gap-4 py-5">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-sky-500/10 shrink-0">
@@ -128,20 +130,17 @@ export default async function QueuePage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </DashboardGrid>
+      </DashboardSection>
 
       {/* Payment grid */}
       {!trainerId ? (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <p className="text-sm text-[var(--muted)]">
-              Sign in to view your payment queue.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="Sign in to view your payment queue."
+        />
       ) : (
         <PaymentGrid initialRows={rows} />
       )}
-    </div>
+    </PageContainer>
   );
 }

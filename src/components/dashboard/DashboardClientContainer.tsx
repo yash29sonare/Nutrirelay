@@ -6,6 +6,8 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { FoodLogTable, type FoodLogEntry } from "@/components/dashboard/FoodLogTable";
 import { Users, Mic, CreditCard, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 // ── Baseline daily macro targets ──────────────────────────────────────────────
 const DAILY_TARGETS = {
@@ -151,11 +153,11 @@ export function DashboardClientContainer({
   );
 
   return (
-    <div className="px-6 py-6 space-y-8 max-w-6xl">
-      <div>
-        <h1 className="text-xl font-semibold text-[var(--foreground)]">Overview</h1>
-        <p className="text-sm text-[var(--muted)] mt-0.5">Your operations at a glance.</p>
-      </div>
+    <PageContainer className="space-y-8">
+      <PageHeader
+        title="Overview"
+        description="Your operations at a glance."
+      />
 
       {/* Operations stat strip */}
       <section aria-label="Operations summary">
@@ -208,6 +210,6 @@ export function DashboardClientContainer({
       <section aria-label="Food log">
         <FoodLogTable entries={entries} />
       </section>
-    </div>
+    </PageContainer>
   );
 }

@@ -1,8 +1,7 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows'
-import { generateText } from 'ai'
+import { runAI } from '@/ai/aiGateway'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
-import { geminiModels } from '../config'
 import { downloadAndStoreWhatsAppMedia } from '../../services/whatsappMedia'
 import type { Database } from '../../shared/types/supabase'
 
@@ -17,67 +16,79 @@ function getDb() {
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 const inputSchema = z.object({
-  mediaId:            z.string(),
-  whatsappMessageId:  z.string(),
-  userContext:        z.record(z.string(), z.any()),
+  mediaId: z.string(),
+  whatsappMessageId: z.string(),
+  userContext: z.record(z.string(), z.any()),
 })
 
 const downloadOutputSchema = z.object({
-  mediaId:            z.string(),
-  whatsappMessageId:  z.string(),
-  userContext:        z.record(z.string(), z.any()),
-  storagePath:        z.string(),
-  mimeType:           z.string(),
-  downloadFailed:     z.boolean(),
+  mediaId: z.string(),
+  whatsappMessageId: z.string(),
+  userContext: z.record(z.string(), z.any()),
+  storagePath: z.string(),
+  mimeType: z.string(),
+  downloadFailed: z.boolean(),
 })
 
 const transcribeOutputSchema = z.object({
-  mediaId:            z.string(),
-  whatsappMessageId:  z.string(),
-  userContext:        z.record(z.string(), z.any()),
-  storagePath:        z.string(),
-  mimeType:           z.string(),
-  downloadFailed:     z.boolean(),
-  transcript:         z.string().nullable(),
-  confidenceScore:    z.number().min(0).max(1),
-  transcribeFailed:   z.boolean(),
+  mediaId: z.string(),
+  whatsappMessageId: z.string(),
+  userContext: z.record(z.string(), z.any()),
+  storagePath: z.string(),
+  mimeType: z.string(),
+  downloadFailed: z.boolean(),
+  transcript: z.string().nullable(),
+  confidenceScore: z.number().min(0).max(1),
+  transcribeFailed: z.boolean(),
 })
 
 const outputSchema = z.object({
-  mediaId:            z.string(),
-  whatsappMessageId:  z.string(),
-  userContext:        z.record(z.string(), z.any()),
-  storagePath:        z.string(),
-  mimeType:           z.string(),
-  downloadFailed:     z.boolean(),
-  transcript:         z.string().nullable(),
-  confidenceScore:    z.number().min(0).max(1),
-  transcribeFailed:   z.boolean(),
-  persisted:          z.boolean(),
-  voiceNoteId:        z.string().nullable(),
-  processingStatus:   z.enum(['pending', 'processing', 'completed', 'failed']),
+  mediaId: z.string(),
+  whatsappMessageId: z.string(),
+  userContext: z.record(z.string(), z.any()),
+  storagePath: z.string(),
+  mimeType: z.string(),
+  downloadFailed: z.boolean(),
+  transcript: z.string().nullable(),
+  confidenceScore: z.number().min(0).max(1),
+  transcribeFailed: z.boolean(),
+  persisted: z.boolean(),
+  voiceNoteId: z.string().nullable(),
+  processingStatus: z.enum(['pending', 'processing', 'completed', 'failed']),
 })
 
-type DownloadOutput    = z.infer<typeof downloadOutputSchema>
-type TranscribeOutput  = z.infer<typeof transcribeOutputSchema>
-type RecoveryOutput    = z.infer<typeof outputSchema>
+type DownloadOutput = z.infer<typeof downloadOutputSchema>
+type TranscribeOutput = z.infer<typeof transcribeOutputSchema>
+type RecoveryOutput = z.infer<typeof outputSchema>
 
 // ── Step 1: Download audio from Meta CDN via existing media service ────────────
 
 const downloadVoiceNoteStep = createStep({
-  id:           'downloadVoiceNoteStep',
-  description:  'Resolves transient Meta CDN URL and stores audio in Supabase Storage.',
+  id: 'downloadVoiceNoteStep',
+  description: 'Resolves transient Meta CDN URL and stores audio in Supabase Storage.',
   inputSchema,
   outputSchema: downloadOutputSchema,
   execute: async ({ inputData }): Promise<DownloadOutput> => {
     try {
+      const trainerId: string | undefined =
+        typeof inputData.userContext?.trainerId === 'string'
+          ? inputData.userContext.trainerId
+          : undefined
+
+      if (!trainerId) {
+        throw new Error(
+          `[recovery/download] missing trainerId in userContext for wam_id ${inputData.whatsappMessageId}`,
+        )
+      }
+
       const { publicUrl, mimeType } = await downloadAndStoreWhatsAppMedia(
+        trainerId,
         inputData.mediaId,
         inputData.whatsappMessageId,
       )
       return {
         ...inputData,
-        storagePath:    publicUrl,
+        storagePath: publicUrl,
         mimeType,
         downloadFailed: false,
       }
@@ -89,8 +100,8 @@ const downloadVoiceNoteStep = createStep({
       )
       return {
         ...inputData,
-        storagePath:    '',
-        mimeType:       'audio/ogg',
+        storagePath: '',
+        mimeType: 'audio/ogg',
         downloadFailed: true,
       }
     }
@@ -100,16 +111,16 @@ const downloadVoiceNoteStep = createStep({
 // ── Step 2: Gemini multimodal transcription ────────────────────────────────────
 
 const transcribeAudioStep = createStep({
-  id:           'transcribeAudioStep',
-  description:  'Sends stored audio to Gemini for transcription with confidence scoring.',
-  inputSchema:  downloadOutputSchema,
+  id: 'transcribeAudioStep',
+  description: 'Sends stored audio to Gemini for transcription with confidence scoring.',
+  inputSchema: downloadOutputSchema,
   outputSchema: transcribeOutputSchema,
   execute: async ({ inputData }): Promise<TranscribeOutput> => {
     if (inputData.downloadFailed || !inputData.storagePath) {
       return {
         ...inputData,
-        transcript:       null,
-        confidenceScore:  0,
+        transcript: null,
+        confidenceScore: 0,
         transcribeFailed: true,
       }
     }
@@ -122,15 +133,15 @@ const transcribeAudioStep = createStep({
 
       const mimeType = inputData.mimeType as `audio/${string}`
 
-      const { text } = await generateText({
-        model: geminiModels.primary,
+      // AI-GATEWAY-ENFORCED
+      const { text } = await runAI({
         messages: [
           {
-            role:    'user',
+            role: 'user',
             content: [
               {
-                type:      'file',
-                data:      audioBuffer,
+                type: 'file',
+                data: audioBuffer,
                 mediaType: mimeType as `audio/${string}`,
               },
               {
@@ -144,18 +155,20 @@ Return only the JSON object. No explanation.`,
             ],
           },
         ],
+        feature: 'voice-note',
+        workflow: 'voiceNoteRecoveryWorkflow',
       })
 
       const clean = (text ?? '').replace(/```json|```/g, '').trim()
       const parsed = z.object({
-        transcript:      z.string().nullable(),
+        transcript: z.string().nullable(),
         confidenceScore: z.number().min(0).max(1),
       }).parse(JSON.parse(clean))
 
       return {
         ...inputData,
-        transcript:       parsed.transcript,
-        confidenceScore:  parsed.confidenceScore,
+        transcript: parsed.transcript,
+        confidenceScore: parsed.confidenceScore,
         transcribeFailed: false,
       }
     } catch (err) {
@@ -166,8 +179,8 @@ Return only the JSON object. No explanation.`,
       )
       return {
         ...inputData,
-        transcript:       null,
-        confidenceScore:  0,
+        transcript: null,
+        confidenceScore: 0,
         transcribeFailed: true,
       }
     }
@@ -177,9 +190,9 @@ Return only the JSON object. No explanation.`,
 // ── Step 3: Confidence gate ────────────────────────────────────────────────────
 
 const evaluateConfidenceStep = createStep({
-  id:           'evaluateConfidenceStep',
-  description:  'Gates downstream persistence — routes low-confidence results to failed status.',
-  inputSchema:  transcribeOutputSchema,
+  id: 'evaluateConfidenceStep',
+  description: 'Gates downstream persistence — routes low-confidence results to failed status.',
+  inputSchema: transcribeOutputSchema,
   outputSchema: transcribeOutputSchema,
   execute: async ({ inputData }): Promise<TranscribeOutput> => {
     const CONFIDENCE_THRESHOLD = 0.75
@@ -199,9 +212,9 @@ const evaluateConfidenceStep = createStep({
 // ── Step 4: Persist voice note record ─────────────────────────────────────────
 
 const persistVoiceNoteStep = createStep({
-  id:           'persistVoiceNoteStep',
-  description:  'Inserts voice_notes row — status=completed if confident, failed otherwise.',
-  inputSchema:  transcribeOutputSchema,
+  id: 'persistVoiceNoteStep',
+  description: 'Inserts voice_notes row — status=completed if confident, failed otherwise.',
+  inputSchema: transcribeOutputSchema,
   outputSchema,
   execute: async ({ inputData }): Promise<RecoveryOutput> => {
     const CONFIDENCE_THRESHOLD = 0.75
@@ -219,8 +232,8 @@ const persistVoiceNoteStep = createStep({
       )
       return {
         ...inputData,
-        persisted:        false,
-        voiceNoteId:      null,
+        persisted: false,
+        voiceNoteId: null,
         processingStatus: 'failed',
       }
     }
@@ -235,11 +248,11 @@ const persistVoiceNoteStep = createStep({
     const { data, error } = await db
       .from('voice_notes')
       .insert({
-        client_id:           clientId,
+        client_id: clientId,
         whatsapp_message_id: inputData.whatsappMessageId,
-        storage_bucket_url:  inputData.storagePath || 'unavailable',
-        transcript:          inputData.transcript ?? null,
-        processing_status:   processingStatus,
+        storage_bucket_url: inputData.storagePath || 'unavailable',
+        transcript: inputData.transcript ?? null,
+        processing_status: processingStatus,
       })
       .select('id')
       .single()
@@ -252,16 +265,16 @@ const persistVoiceNoteStep = createStep({
       )
       return {
         ...inputData,
-        persisted:        false,
-        voiceNoteId:      null,
+        persisted: false,
+        voiceNoteId: null,
         processingStatus: 'failed',
       }
     }
 
     return {
       ...inputData,
-      persisted:        true,
-      voiceNoteId:      data.id,
+      persisted: true,
+      voiceNoteId: data.id,
       processingStatus,
     }
   },
@@ -270,12 +283,12 @@ const persistVoiceNoteStep = createStep({
 // ── Workflow assembly ──────────────────────────────────────────────────────────
 
 export const voiceNoteRecoveryWorkflow = createWorkflow({
-  id:           'voiceNoteRecoveryWorkflow',
+  id: 'voiceNoteRecoveryWorkflow',
   inputSchema,
   outputSchema,
 })
-  .then(downloadVoiceNoteStep    as any)
-  .then(transcribeAudioStep      as any)
-  .then(evaluateConfidenceStep   as any)
-  .then(persistVoiceNoteStep     as any)
+  .then(downloadVoiceNoteStep as any)
+  .then(transcribeAudioStep as any)
+  .then(evaluateConfidenceStep as any)
+  .then(persistVoiceNoteStep as any)
   .commit()

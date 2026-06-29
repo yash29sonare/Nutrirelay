@@ -113,6 +113,26 @@ fortressfitness/
 │   │   ├── client.ts                 # Browser Supabase client (anon key)
 │   │   ├── server.ts                 # Server Supabase client (service role, SSR cookies)
 │   │   └── admin.ts                  # Service-role admin client (bypasses RLS for system ops ONLY)
+│   ├── operations/
+│   │   ├── dashboard.ts              # Dashboard RPC wrapper + mapper
+│   │   └── clients.ts                # Client domain operations (getClientList, etc.)
+│   ├── domain/
+│   │   └── dashboardSemantics.ts     # Centralized semantic rules (risk, compliance, trend)
+│   ├── insights/
+│   │   └── dashboardInsights.ts      # Deterministic insight engine
+│   ├── engagement/
+│   │   ├── engagementEngine.ts       # Action queue generation + reconcile + rebuildState
+│   │   ├── engagementRepository.ts   # Persisted action CRUD
+│   │   ├── engagementStateEngine.ts  # In-memory suppression rules
+│   │   ├── deduplicationEngine.ts    # Set-based O(n) dedup
+│   │   ├── getTrainerDailyFeed.ts    # Priority grouping
+│   │   └── actionKey.ts             # Canonical action_key for deterministic matching
+│   ├── events/
+│   │   └── engagementEventStore.ts   # Append-only immutable event store
+│   ├── outcomes/
+│   │   └── eventOutcomeEngine.ts     # Derived outcome computation from events
+│   ├── ai/
+│   │   └── engagementAI.ts          # Advisory AI (read-only over events, never writes DB)
 │   ├── whatsapp/
 │   │   ├── send.ts                   # sendFreeMessage() + sendTemplateMessage()
 │   │   ├── templates.ts              # All approved Meta template IDs + param schemas

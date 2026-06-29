@@ -3,6 +3,9 @@ import { runGhostingAudit } from "@/lib/automation/ghosting-daemon";
 import { executeStoragePrune } from "@/lib/automation/storage-pruner";
 import { runRenewalEngine } from "@/lib/automation/renewal-engine";
 import { generateWeeklyReports } from "@/lib/automation/weekly-report";
+import { runComplianceForAll } from "@/lib/automation/compliance-batch";
+import { generateMonthlyProjections } from "@/lib/automation/monthly-projections";
+import { runScheduler } from "@/lib/automation/scheduler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -79,11 +82,46 @@ async function handleCronRequest(req: Request): Promise<Response> {
         });
       }
 
+      case "compliance": {
+        const complianceSummary = await runComplianceForAll();
+        return new Response(JSON.stringify({ ok: true, action, summary: complianceSummary }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      case "monthly-projections": {
+        const projectionSummary = await generateMonthlyProjections();
+        return new Response(JSON.stringify({ ok: true, action, summary: projectionSummary }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      case "scheduler": {
+        const summary = await runScheduler();
+        return new Response(JSON.stringify({ ok: true, action, summary }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      case "all": {
+        const results: Record<string, any> = {};
+        results.compliance = await runComplianceForAll();
+        results.projections = await generateMonthlyProjections();
+        results.reports = await generateWeeklyReports();
+        return new Response(JSON.stringify({ ok: true, action, results }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       default:
         return new Response(
           JSON.stringify({
             error: "Unknown action",
-            valid_actions: ["nudges", "ghosts", "prune", "renewals", "reports"],
+            valid_actions: ["nudges", "ghosts", "prune", "renewals", "reports", "compliance", "monthly-projections", "scheduler", "all"],
           }),
           { status: 400, headers: { "Content-Type": "application/json" } }
         );

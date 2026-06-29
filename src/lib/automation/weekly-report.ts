@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { generateText } from "ai";
+import { runAI } from "@/ai/aiGateway";
 import { geminiModels } from "@/mastra/config";
 import { sendDocumentMessage } from "@/lib/whatsapp/send";
 import { buildSimplePdf, wrapText, type PdfLine } from "@/lib/pdf/weekly-report";
@@ -39,6 +39,8 @@ interface WeeklyAggregate {
   verifiedCount: number;
   verifiedPct: number;
   streakDays: number;
+  complianceScore: number;
+  riskLabel: string;
 }
 
 export interface WeeklyReportSummary {
@@ -56,6 +58,7 @@ function aggregate(logs: FoodLogRow[]): WeeklyAggregate {
     return {
       logCount: 0, totalCalories: 0, avgCalories: 0, avgProtein: 0,
       avgCarbs: 0, avgFat: 0, verifiedCount: 0, verifiedPct: 0, streakDays: 0,
+      complianceScore: 0, riskLabel: "No Data",
     };
   }
 
@@ -68,10 +71,16 @@ function aggregate(logs: FoodLogRow[]): WeeklyAggregate {
     totalCarbs += Number(log.carbs_g ?? 0);
     totalFat += Number(log.fat_g ?? 0);
     if (log.verification_status === "VERIFIED") verifiedCount++;
-    daysWithLogs.add(log.logged_at.slice(0, 10)); // YYYY-MM-DD
+    daysWithLogs.add(log.logged_at.slice(0, 10));
   }
 
   const round = (n: number) => Math.round(n * 10) / 10;
+  const expectedMeals = 21;
+  const mealScore = Math.min(100, (logCount / expectedMeals) * 100);
+  const verificationScore = (verifiedCount / logCount) * 100;
+  const consistencyScore = (daysWithLogs.size / 7) * 100;
+  const complianceScore = Math.round(mealScore * 0.4 + verificationScore * 0.3 + consistencyScore * 0.3);
+  const riskLabel = complianceScore >= 70 ? "On Track" : complianceScore >= 40 ? "At Risk" : "Critical";
 
   return {
     logCount,
@@ -83,6 +92,8 @@ function aggregate(logs: FoodLogRow[]): WeeklyAggregate {
     verifiedCount,
     verifiedPct: Math.round((verifiedCount / logCount) * 100),
     streakDays: daysWithLogs.size,
+    complianceScore,
+    riskLabel,
   };
 }
 
@@ -97,20 +108,21 @@ Base it ONLY on these numbers from the past 7 days:
 - Average daily calories per logged meal: ${agg.avgCalories} kcal
 - Average macros per meal: ${agg.avgProtein}g protein, ${agg.avgCarbs}g carbs, ${agg.avgFat}g fat
 - Photo-verified logs: ${agg.verifiedPct}% (${agg.verifiedCount}/${agg.logCount})
+- Compliance score: ${agg.complianceScore}/100 — ${agg.riskLabel}
 
 Be specific to these numbers, factual, and encouraging without empty praise. Plain text only, no markdown, no headings.`;
 
-  const tiers = [geminiModels.primary, geminiModels.fallback1, geminiModels.fallback2];
-
-  for (const model of tiers) {
-    try {
-      const { text } = await generateText({ model, prompt });
-      const trimmed = (text ?? "").trim();
-      if (trimmed) return trimmed;
-    } catch (err) {
-      console.error("[weekly-report] narrative tier failed:", (err as Error).message);
-      // fall through to next tier
-    }
+  try {
+    // AI-GATEWAY-ENFORCED
+    const { text } = await runAI({
+      prompt,
+      feature: "weekly-report",
+      modelTiers: [geminiModels.primary, geminiModels.fallback1, geminiModels.fallback2],
+    });
+    const trimmed = (text ?? "").trim();
+    if (trimmed) return trimmed;
+  } catch (err) {
+    console.error("[weekly-report] narrative all tiers failed:", (err as Error).message);
   }
 
   // Hard fallback — data-only narrative, report still ships on schedule
@@ -139,7 +151,8 @@ function buildReportLines(
     { text: `Meals logged: ${agg.logCount}  (${agg.streakDays} active days)`, size: 11 },
     { text: `Avg calories / meal: ${agg.avgCalories} kcal`, size: 11 },
     { text: `Avg protein: ${agg.avgProtein} g    Avg carbs: ${agg.avgCarbs} g    Avg fat: ${agg.avgFat} g`, size: 11 },
-    { text: `Photo-verified: ${agg.verifiedPct}%  (${agg.verifiedCount}/${agg.logCount})`, size: 11, gap: 1 },
+    { text: `Photo-verified: ${agg.verifiedPct}%  (${agg.verifiedCount}/${agg.logCount})`, size: 11 },
+    { text: `Compliance Score: ${agg.complianceScore}/100 (${agg.riskLabel})`, size: 11, gap: 1 },
     { text: "Coach Evaluation", size: 13, bold: true },
   ];
 

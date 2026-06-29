@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import { Dumbbell } from "lucide-react";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Label } from "@/components/ui/Label";
+import { ErrorBanner } from "@/components/ui/StatusBanner";
 
 function getSupabase() {
   return createBrowserClient(
@@ -68,13 +72,8 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             {/* Email */}
             <div className="space-y-1.5">
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-[var(--foreground)]"
-              >
-                Email address
-              </label>
-              <input
+              <Label htmlFor="email">Email address</Label>
+              <Input
                 id="email"
                 type="email"
                 autoComplete="email"
@@ -82,20 +81,14 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--surface-border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="trainer@example.com"
               />
             </div>
 
             {/* Password */}
             <div className="space-y-1.5">
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-[var(--foreground)]"
-              >
-                Password
-              </label>
-              <input
+              <Label htmlFor="password">Password</Label>
+              <Input
                 id="password"
                 type="password"
                 autoComplete="current-password"
@@ -103,39 +96,26 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
-                className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--surface-border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="••••••••"
               />
             </div>
 
             {/* Error block */}
             {error && (
-              <div
-                role="alert"
-                className="px-3.5 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-500"
-              >
-                {error}
-              </div>
+              <ErrorBanner>{error}</ErrorBanner>
             )}
 
             {/* Submit */}
-            <button
+            <Button
               type="submit"
+              variant="brand"
+              size="lg"
               disabled={loading || !email || !password}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              loading={loading}
+              className="w-full"
             >
-              {loading ? (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"
-                  />
-                  Signing in…
-                </>
-              ) : (
-                "Sign in"
-              )}
-            </button>
+              {loading ? "Signing in…" : "Sign in"}
+            </Button>
           </form>
         </div>
 

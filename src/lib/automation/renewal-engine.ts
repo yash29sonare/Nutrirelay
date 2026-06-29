@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendTemplateMessage } from "@/lib/whatsapp/send";
+import { logCommunication } from "@/lib/communication-logger";
+import { writeAuditLog } from "@/lib/operations/audit";
 
 // ── Renewal lifecycle thresholds ───────────────────────────────────────────────
 // Soft reminder fires when <= 2 days remain (the "Day 28" of a 30-day cycle).
@@ -48,7 +50,7 @@ export async function runRenewalEngine(): Promise<RenewalRunSummary> {
 
   // Pull active-lifecycle subscriptions with the linked client profile.
   const { data: subs, error } = await db
-    .from("subscriptions")
+    .from("client_subscriptions")
     .select(
       `id, client_id, status, end_date, renewal_notified_d28, renewal_notified_d30,
        profiles!subscriptions_client_id_fkey(full_name, phone_number)`
@@ -86,9 +88,37 @@ export async function runRenewalEngine(): Promise<RenewalRunSummary> {
     // ── Day 30 — expiry reached: urgent final reminder + pause subscription ─────
     if (daysRemaining <= 0 && !raw.renewal_notified_d30) {
       try {
-        await sendTemplateMessage(phone, "renewal_reminder_urgent", [clientName]);
+        // Resolve tenant owner (trainer_id) for template sending
+        const { data: tcRow, error: tcError } = await db
+          .from("trainer_clients")
+          .select("trainer_id")
+          .eq("client_id", raw.client_id)
+          .eq("is_active", true)
+          .limit(1)
+          .single();
+
+        if (!tcError && tcRow) {
+          const trainerId = String(tcRow.trainer_id);
+
+          await sendTemplateMessage(
+            trainerId,
+            phone,
+            "renewal_reminder_urgent",
+            [clientName]
+          );
+
+          await logCommunication({
+            trainer_id: trainerId,
+            client_id: raw.client_id,
+            direction: "OUTBOUND",
+            message_type: "TEMPLATE",
+            delivery_status: "sent",
+            metadata: { template_id: "renewal_reminder_urgent", days_remaining: 0 },
+          });
+        }
+
         await db
-          .from("subscriptions")
+          .from("client_subscriptions")
           .update({ renewal_notified_d30: true, status: "past_due" })
           .eq("id", raw.id);
         summary.urgentSent++;
@@ -106,9 +136,37 @@ export async function runRenewalEngine(): Promise<RenewalRunSummary> {
     // ── Day 28 — within soft window: gentle reminder ────────────────────────────
     if (daysRemaining > 0 && daysRemaining <= SOFT_REMINDER_DAYS && !raw.renewal_notified_d28) {
       try {
-        await sendTemplateMessage(phone, "renewal_reminder_soft", [clientName, expiryDate]);
+        // Resolve tenant owner (trainer_id) for template sending
+        const { data: tcRow, error: tcError } = await db
+          .from("trainer_clients")
+          .select("trainer_id")
+          .eq("client_id", raw.client_id)
+          .eq("is_active", true)
+          .limit(1)
+          .single();
+
+        if (!tcError && tcRow) {
+          const trainerId = String(tcRow.trainer_id);
+
+          await sendTemplateMessage(
+            trainerId,
+            phone,
+            "renewal_reminder_soft",
+            [clientName, expiryDate]
+          );
+
+          await logCommunication({
+            trainer_id: trainerId,
+            client_id: raw.client_id,
+            direction: "OUTBOUND",
+            message_type: "TEMPLATE",
+            delivery_status: "sent",
+            metadata: { template_id: "renewal_reminder_soft", days_remaining: daysRemaining },
+          });
+        }
+
         await db
-          .from("subscriptions")
+          .from("client_subscriptions")
           .update({ renewal_notified_d28: true })
           .eq("id", raw.id);
         summary.softSent++;
@@ -140,7 +198,7 @@ export async function renewSubscriptionAfterPayment(clientId: string): Promise<v
   const db = getDb();
 
   const { data: sub } = await db
-    .from("subscriptions")
+    .from("client_subscriptions")
     .select("id, end_date")
     .eq("client_id", clientId)
     .limit(1)
@@ -157,7 +215,7 @@ export async function renewSubscriptionAfterPayment(clientId: string): Promise<v
   const newExpiry = new Date(anchor + 30 * MS_PER_DAY).toISOString();
 
   await db
-    .from("subscriptions")
+    .from("client_subscriptions")
     .update({
       end_date: newExpiry,
       status: "active",
@@ -165,6 +223,25 @@ export async function renewSubscriptionAfterPayment(clientId: string): Promise<v
       renewal_notified_d30: false,
     })
     .eq("id", row.id);
+
+  const { data: tcRow } = await db
+    .from("trainer_clients")
+    .select("trainer_id")
+    .eq("client_id", clientId)
+    .eq("is_active", true)
+    .limit(1)
+    .single();
+
+  if (tcRow) {
+    await writeAuditLog({
+      trainer_id: String((tcRow as { trainer_id: string }).trainer_id),
+      actor_id: String((tcRow as { trainer_id: string }).trainer_id),
+      event_type: "subscription_renewed",
+      entity_type: "client_subscriptions",
+      entity_id: row.id,
+      metadata: { client_id: clientId, new_end_date: newExpiry },
+    }).catch(() => {});
+  }
 
   console.log(`[renewal-engine] subscription renewed for client ${clientId} until ${newExpiry}`);
 }

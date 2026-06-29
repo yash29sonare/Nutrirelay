@@ -1,0 +1,335 @@
+import { createClient } from "@supabase/supabase-js"
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  )
+}
+
+export interface ClientSummaryCard {
+  client_id: string
+  client_name: string | null
+  goal_type: string | null
+  compliance_score: number | null
+  status_color: string
+  meals_today: number
+  last_logged: string | null
+  active_strikes: number
+}
+
+export interface ClientDetail {
+  client_id: string
+  full_name: string | null
+  phone_number: string | null
+  goal: Record<string, any> | null
+  health: Record<string, any> | null
+  preferences: Record<string, any> | null
+  workout: Record<string, any> | null
+  compliance: Record<string, any> | null
+}
+
+export interface DailyNutrition {
+  date: string
+  calories: number
+  protein_g: number
+  carbs_g: number
+  fat_g: number
+  meal_count: number
+}
+
+export interface WeeklyNutrition {
+  week_start: string
+  avg_calories: number
+  avg_protein: number
+  avg_carbs: number
+  avg_fat: number
+  log_count: number
+  streak_days: number
+}
+
+export interface ClientReport {
+  report_date: string
+  summary: string
+  pdf_url: string | null
+}
+
+export async function getTrainerClientSummaries(trainerId: string): Promise<ClientSummaryCard[]> {
+  const db = getDb()
+
+  const { data: tc } = await db
+    .from("trainer_clients")
+    .select("client_id")
+    .eq("trainer_id", trainerId)
+    .eq("is_active", true)
+
+  if (!tc || tc.length === 0) return []
+
+  const clientIds = tc.map((r: Record<string, any>) => r.client_id)
+
+  const [profilesRes, goalsRes, complianceRes, todayMealsRes, strikesRes] = await Promise.all([
+    db.from("profiles").select("id, full_name").in("id", clientIds),
+    db.from("client_goals").select("client_id, goal_type").in("client_id", clientIds).eq("goal_status", "ACTIVE"),
+    db.from("client_compliance_snapshots")
+      .select("client_id, compliance_score, status_color")
+      .in("client_id", clientIds)
+      .order("calculated_at", { ascending: false }),
+    db.from("food_logs")
+      .select("client_id, logged_at")
+      .in("client_id", clientIds)
+      .gte("logged_at", new Date().toISOString().slice(0, 10)),
+    db.from("strike_log").select("profile_id").in("profile_id", clientIds),
+  ])
+
+  const profiles = (profilesRes.data ?? []) as Array<{ id: string; full_name: string | null }>
+  const goals = (goalsRes.data ?? []) as Array<{ client_id: string; goal_type: string }>
+  const compliance = (complianceRes.data ?? []) as Array<{ client_id: string; compliance_score: number; status_color: string }>
+  const todayMeals = (todayMealsRes.data ?? []) as Array<{ client_id: string; logged_at: string }>
+  const strikes = (strikesRes.data ?? []) as Array<{ profile_id: string }>
+
+  const goalMap = new Map(goals.map((g) => [g.client_id, g.goal_type]))
+  const complianceMap = new Map(compliance.map((c) => [c.client_id, c]))
+  const todayMealCount = new Map<string, number>()
+  for (const m of todayMeals) {
+    todayMealCount.set(m.client_id, (todayMealCount.get(m.client_id) ?? 0) + 1)
+  }
+  const lastLog = new Map<string, string>()
+  for (const m of todayMeals) {
+    if (!lastLog.has(m.client_id) || m.logged_at > lastLog.get(m.client_id)!) {
+      lastLog.set(m.client_id, m.logged_at)
+    }
+  }
+  const strikeCount = new Map<string, number>()
+  for (const s of strikes) {
+    strikeCount.set(s.profile_id, (strikeCount.get(s.profile_id) ?? 0) + 1)
+  }
+
+  const profileMap = new Map(profiles.map((p) => [p.id, p.full_name]))
+
+  return clientIds.map((id) => {
+    const comp = complianceMap.get(id)
+    return {
+      client_id: id,
+      client_name: profileMap.get(id) ?? null,
+      goal_type: goalMap.get(id) ?? null,
+      compliance_score: comp?.compliance_score ?? null,
+      status_color: comp?.status_color ?? "GREEN",
+      meals_today: todayMealCount.get(id) ?? 0,
+      last_logged: lastLog.get(id) ?? null,
+      active_strikes: strikeCount.get(id) ?? 0,
+    }
+  })
+}
+
+export async function getClientDetail(clientId: string, trainerId: string): Promise<ClientDetail | null> {
+  const db = getDb()
+
+  const { data: tc } = await db
+    .from("trainer_clients")
+    .select("client_id")
+    .eq("client_id", clientId)
+    .eq("trainer_id", trainerId)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle()
+
+  if (!tc) return null
+
+  const [profileRes, goalRes, healthRes, prefRes, workoutRes, complianceRes] = await Promise.all([
+    db.from("profiles").select("full_name, phone_number").eq("id", clientId).single(),
+    db.from("client_goals").select("*").eq("client_id", clientId).eq("goal_status", "ACTIVE").limit(1).maybeSingle(),
+    db.from("client_health_profiles").select("*").eq("client_id", clientId).limit(1).maybeSingle(),
+    db.from("client_preferences").select("*").eq("client_id", clientId).limit(1).maybeSingle(),
+    db.from("client_workout_schedules").select("*").eq("client_id", clientId).limit(1).maybeSingle(),
+    db.from("client_compliance_snapshots").select("*").eq("client_id", clientId).order("calculated_at", { ascending: false }).limit(1).maybeSingle(),
+  ])
+
+  const profile = profileRes.data as { full_name: string | null; phone_number: string | null } | null
+
+  return {
+    client_id: clientId,
+    full_name: profile?.full_name ?? null,
+    phone_number: profile?.phone_number ?? null,
+    goal: (goalRes.data as Record<string, any> | null),
+    health: (healthRes.data as Record<string, any> | null),
+    preferences: (prefRes.data as Record<string, any> | null),
+    workout: (workoutRes.data as Record<string, any> | null),
+    compliance: (complianceRes.data as Record<string, any> | null),
+  }
+}
+
+export async function getDailyNutrition(clientId: string, date: string, trainerId?: string): Promise<DailyNutrition[]> {
+  const db = getDb()
+
+  const { data: meals } = await db
+    .from("food_logs")
+    .select("logged_at, calories, protein_g, carbs_g, fat_g")
+    .eq("client_id", clientId)
+    .gte("logged_at", `${date}T00:00:00Z`)
+    .lt("logged_at", `${date}T23:59:59Z`)
+    .order("logged_at", { ascending: true })
+
+  const rows = (meals ?? []) as Array<{ logged_at: string; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }>
+
+  if (rows.length === 0) {
+    return [{
+      date,
+      calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      meal_count: 0,
+    }]
+  }
+
+  return [{
+    date,
+    calories: rows.reduce((s, r) => s + Number(r.calories ?? 0), 0),
+    protein_g: Math.round(rows.reduce((s, r) => s + Number(r.protein_g ?? 0), 0) * 10) / 10,
+    carbs_g: Math.round(rows.reduce((s, r) => s + Number(r.carbs_g ?? 0), 0) * 10) / 10,
+    fat_g: Math.round(rows.reduce((s, r) => s + Number(r.fat_g ?? 0), 0) * 10) / 10,
+    meal_count: rows.length,
+  }]
+}
+
+export async function getWeeklyNutrition(clientId: string, trainerId?: string): Promise<WeeklyNutrition[]> {
+  const db = getDb()
+  const weekAgo = new Date(Date.now() - 7 * MS_PER_DAY).toISOString()
+
+  const { data: meals } = await db
+    .from("food_logs")
+    .select("logged_at, calories, protein_g, carbs_g, fat_g")
+    .eq("client_id", clientId)
+    .gte("logged_at", weekAgo)
+    .order("logged_at", { ascending: true })
+
+  const rows = (meals ?? []) as Array<{ logged_at: string; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }>
+
+  const days = new Map<string, { cals: number[]; pro: number[]; car: number[]; fat: number[] }>()
+  for (const r of rows) {
+    const day = r.logged_at.slice(0, 10)
+    if (!days.has(day)) days.set(day, { cals: [], pro: [], car: [], fat: [] })
+    const d = days.get(day)!
+    d.cals.push(Number(r.calories ?? 0))
+    d.pro.push(Number(r.protein_g ?? 0))
+    d.car.push(Number(r.carbs_g ?? 0))
+    d.fat.push(Number(r.fat_g ?? 0))
+  }
+
+  const weekStart = new Date(Date.now() - 7 * MS_PER_DAY).toISOString().slice(0, 10)
+  const totalCalories = rows.reduce((s, r) => s + Number(r.calories ?? 0), 0)
+
+  return [{
+    week_start: weekStart,
+    avg_calories: rows.length > 0 ? Math.round(totalCalories / rows.length) : 0,
+    avg_protein: rows.length > 0 ? Math.round(rows.reduce((s, r) => s + Number(r.protein_g ?? 0), 0) / rows.length * 10) / 10 : 0,
+    avg_carbs: rows.length > 0 ? Math.round(rows.reduce((s, r) => s + Number(r.carbs_g ?? 0), 0) / rows.length * 10) / 10 : 0,
+    avg_fat: rows.length > 0 ? Math.round(rows.reduce((s, r) => s + Number(r.fat_g ?? 0), 0) / rows.length * 10) / 10 : 0,
+    log_count: rows.length,
+    streak_days: days.size,
+  }]
+}
+
+export async function getMonthlyNutrition(clientId: string, trainerId?: string): Promise<WeeklyNutrition[]> {
+  const db = getDb()
+  const monthAgo = new Date(Date.now() - 30 * MS_PER_DAY).toISOString()
+
+  const { data: meals } = await db
+    .from("food_logs")
+    .select("logged_at, calories, protein_g, carbs_g, fat_g")
+    .eq("client_id", clientId)
+    .gte("logged_at", monthAgo)
+    .order("logged_at", { ascending: true })
+
+  const rows = (meals ?? []) as Array<{ logged_at: string; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }>
+
+  const days = new Set(rows.map((r) => r.logged_at.slice(0, 10)))
+  const totalCalories = rows.reduce((s, r) => s + Number(r.calories ?? 0), 0)
+
+  const monthStart = new Date(Date.now() - 30 * MS_PER_DAY).toISOString().slice(0, 10)
+  return [{
+    week_start: monthStart,
+    avg_calories: rows.length > 0 ? Math.round(totalCalories / rows.length) : 0,
+    avg_protein: rows.length > 0 ? Math.round(rows.reduce((s, r) => s + Number(r.protein_g ?? 0), 0) / rows.length * 10) / 10 : 0,
+    avg_carbs: rows.length > 0 ? Math.round(rows.reduce((s, r) => s + Number(r.carbs_g ?? 0), 0) / rows.length * 10) / 10 : 0,
+    avg_fat: rows.length > 0 ? Math.round(rows.reduce((s, r) => s + Number(r.fat_g ?? 0), 0) / rows.length * 10) / 10 : 0,
+    log_count: rows.length,
+    streak_days: days.size,
+  }]
+}
+
+export async function getClientCompliance(clientId: string, trainerId: string): Promise<Record<string, any> | null> {
+  const db = getDb()
+
+  const { data: tc } = await db
+    .from("trainer_clients")
+    .select("client_id")
+    .eq("client_id", clientId)
+    .eq("trainer_id", trainerId)
+    .limit(1)
+    .maybeSingle()
+
+  if (!tc) return null
+
+  const { data } = await db
+    .from("client_compliance_snapshots")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("calculated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return (data as Record<string, any> | null) ?? null
+}
+
+export async function getClientReports(clientId: string, trainerId: string): Promise<ClientReport[]> {
+  const db = getDb()
+
+  const { data: tc } = await db
+    .from("trainer_clients")
+    .select("client_id")
+    .eq("client_id", clientId)
+    .eq("trainer_id", trainerId)
+    .limit(1)
+    .maybeSingle()
+
+  if (!tc) return []
+
+  const { data: weekly } = await db
+    .from("weekly_reports")
+    .select("report_date, summary, pdf_storage_url")
+    .eq("client_id", clientId)
+    .order("report_date", { ascending: false })
+    .limit(12)
+
+  const { data: monthly } = await db
+    .from("monthly_reports")
+    .select("report_month, summary")
+    .eq("client_id", clientId)
+    .order("report_month", { ascending: false })
+    .limit(12)
+
+  const reports: ClientReport[] = []
+
+  for (const r of (weekly ?? []) as Array<{ report_date: string; summary: string; pdf_storage_url: string | null }>) {
+    reports.push({
+      report_date: r.report_date,
+      summary: r.summary,
+      pdf_url: r.pdf_storage_url,
+    })
+  }
+
+  for (const r of (monthly ?? []) as Array<{ report_month: string; summary: string }>) {
+    reports.push({
+      report_date: r.report_month,
+      summary: r.summary,
+      pdf_url: null,
+    })
+  }
+
+  reports.sort((a, b) => b.report_date.localeCompare(a.report_date))
+  return reports
+}

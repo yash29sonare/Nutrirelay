@@ -1,20 +1,19 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows'
-import { generateText } from 'ai'
+import { runAI } from '@/ai/aiGateway'
 import { z } from 'zod'
 import { Pool } from 'pg'
-import { geminiModels } from '../config'
 import { downloadAndStoreWhatsAppMedia } from '../../services/whatsappMedia'
 import { sendWhatsAppTextMessage } from '../../services/whatsappOutbound'
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 export interface WhatsAppPipelinePayload {
-  wam_id:            string
-  client_phone:      string
-  trainer_id:        string
+  wam_id: string
+  client_phone: string
+  trainer_id: string
   message_timestamp: number
-  message_type:      'text' | 'audio' | 'image' | 'interactive' | 'unknown'
-  raw_body:          string
+  message_type: 'text' | 'audio' | 'image' | 'interactive' | 'unknown'
+  raw_body: string
 }
 
 const messageTypeEnum = z.enum(['text', 'audio', 'image', 'interactive', 'unknown'])
@@ -26,29 +25,29 @@ const intentEnum = z.enum([
 
 // Shared flat schema propagated across all sequential steps
 const pipelineSchema = z.object({
-  wam_id:               z.string(),
-  client_phone:         z.string(),
-  trainer_id:           z.string(),
-  message_timestamp:    z.number(),
-  message_type:         messageTypeEnum,
-  raw_body:             z.string(),
-  isDuplicate:          z.boolean().optional(),
+  wam_id: z.string(),
+  client_phone: z.string(),
+  trainer_id: z.string(),
+  message_timestamp: z.number(),
+  message_type: messageTypeEnum,
+  raw_body: z.string(),
+  isDuplicate: z.boolean().optional(),
   isSubscriptionActive: z.boolean().optional(),
-  clientId:             z.string().nullable().optional(),
-  tierType:             z.string().nullable().optional(),
-  shouldProcess:        z.boolean().optional(),
-  skipReason:           z.string().nullable().optional(),
-  intent:               intentEnum.optional(),
-  extractedContent:     z.string().nullable().optional(),
-  mediaUrl:             z.string().nullable().optional(),
-  food_name:            z.string().nullable().optional(),
-  estimated_calories:   z.coerce.number().nullable().optional(),
-  protein_g:            z.coerce.number().nullable().optional(),
-  carbs_g:              z.coerce.number().nullable().optional(),
-  fat_g:                z.coerce.number().nullable().optional(),
-  serving_size:         z.string().nullable().optional(),
-  success:              z.boolean().optional(),
-  logId:                z.string().nullable().optional(),
+  clientId: z.string().nullable().optional(),
+  tierType: z.string().nullable().optional(),
+  shouldProcess: z.boolean().optional(),
+  skipReason: z.string().nullable().optional(),
+  intent: intentEnum.optional(),
+  extractedContent: z.string().nullable().optional(),
+  mediaUrl: z.string().nullable().optional(),
+  food_name: z.string().nullable().optional(),
+  estimated_calories: z.coerce.number().nullable().optional(),
+  protein_g: z.coerce.number().nullable().optional(),
+  carbs_g: z.coerce.number().nullable().optional(),
+  fat_g: z.coerce.number().nullable().optional(),
+  serving_size: z.string().nullable().optional(),
+  success: z.boolean().optional(),
+  logId: z.string().nullable().optional(),
 })
 
 type PipelineState = z.infer<typeof pipelineSchema>
@@ -59,9 +58,9 @@ const branchOutputSchema = z.object({}).passthrough()
 // ─── Step 1: Idempotency guard ────────────────────────────────────────────────
 
 const validateWebhookStep = createStep({
-  id:           'validateWebhook',
-  description:  'Checks food_logs for an existing wam_id to prevent duplicate processing.',
-  inputSchema:  pipelineSchema,
+  id: 'validateWebhook',
+  description: 'Checks food_logs for an existing wam_id to prevent duplicate processing.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     const existing = await pool.query(
@@ -75,9 +74,9 @@ const validateWebhookStep = createStep({
 // ─── Step 2: Subscription gate ───────────────────────────────────────────────
 
 const subscriptionCheckStep = createStep({
-  id:           'subscriptionCheck',
-  description:  'Confirms the client has an active subscription before processing.',
-  inputSchema:  pipelineSchema,
+  id: 'subscriptionCheck',
+  description: 'Confirms the client has an active subscription before processing.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     if (inputData.isDuplicate) {
@@ -106,8 +105,8 @@ const subscriptionCheckStep = createStep({
     return {
       ...inputData,
       isSubscriptionActive: row.status !== 'canceled' && !isExpired,
-      clientId:             row.client_id,
-      tierType:             row.tier_type,
+      clientId: row.client_id,
+      tierType: row.tier_type,
     }
   },
 })
@@ -115,9 +114,9 @@ const subscriptionCheckStep = createStep({
 // ─── Step 3: Intent classification ───────────────────────────────────────────
 
 const multimodalIngestionStep = createStep({
-  id:           'multimodalIngestion',
-  description:  'Classifies message type and gates further processing.',
-  inputSchema:  pipelineSchema,
+  id: 'multimodalIngestion',
+  description: 'Classifies message type and gates further processing.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     if (inputData.isDuplicate) {
@@ -129,17 +128,17 @@ const multimodalIngestionStep = createStep({
     }
 
     const intentMap: Record<string, PipelineState['intent']> = {
-      audio:       'voice_note',
-      image:       'payment_screenshot',
+      audio: 'voice_note',
+      image: 'payment_screenshot',
       interactive: 'poll_response',
-      text:        'meal_log',
+      text: 'meal_log',
     }
 
     return {
       ...inputData,
-      shouldProcess:    true,
-      skipReason:       null,
-      intent:           intentMap[inputData.message_type] ?? 'unknown',
+      shouldProcess: true,
+      skipReason: null,
+      intent: intentMap[inputData.message_type] ?? 'unknown',
       extractedContent: inputData.raw_body,
     }
   },
@@ -148,9 +147,9 @@ const multimodalIngestionStep = createStep({
 // ─── Branch Step A: Audio transcription via Gemini ───────────────────────────
 
 const audioExtractionStep = createStep({
-  id:           'audioExtractionStep',
-  description:  'Downloads audio from Meta CDN and transcribes via Gemini multimodal.',
-  inputSchema:  pipelineSchema,
+  id: 'audioExtractionStep',
+  description: 'Downloads audio from Meta CDN and transcribes via Gemini multimodal.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     if (!inputData.shouldProcess) return inputData
@@ -163,20 +162,24 @@ const audioExtractionStep = createStep({
 
       if (!mediaId) throw new Error('No media_id in raw_body for audio message')
 
-      const { publicUrl, mimeType } = await downloadAndStoreWhatsAppMedia(mediaId, inputData.wam_id)
+      const { publicUrl, mimeType } = await downloadAndStoreWhatsAppMedia(
+        inputData.trainer_id,
+        mediaId,
+        inputData.wam_id,
+      )
 
       // Fetch stored binary for inline Gemini multimodal call
       const mediaBuffer = await fetch(publicUrl).then((r) => r.arrayBuffer())
 
-      const { text } = await generateText({
-        model: geminiModels.primary,
+      // AI-GATEWAY-ENFORCED
+      const { text: transcriptText } = await runAI({
         messages: [
           {
-            role:    'user',
+            role: 'user',
             content: [
               {
-                type:      'file',
-                data:      mediaBuffer,
+                type: 'file',
+                data: mediaBuffer,
                 mediaType: mimeType as `audio/${string}`,
               },
               {
@@ -186,9 +189,11 @@ const audioExtractionStep = createStep({
             ],
           },
         ],
+        feature: 'meal-logging',
+        workflow: 'whatsappPipeline',
       })
 
-      transcript = text ?? null
+      transcript = transcriptText ?? null
     } catch (err) {
       console.error('[audioExtractionStep] transcription failed for wam_id', inputData.wam_id, (err as Error).message)
       transcript = null
@@ -197,7 +202,7 @@ const audioExtractionStep = createStep({
     return {
       ...inputData,
       extractedContent: transcript ?? '[audio_transcription_failed]',
-      intent:           transcript ? 'meal_log' : 'voice_note',
+      intent: transcript ? 'meal_log' : 'voice_note',
     }
   },
 })
@@ -205,9 +210,9 @@ const audioExtractionStep = createStep({
 // ─── Branch Step B: Vision / OCR via Gemini ──────────────────────────────────
 
 const imageExtractionStep = createStep({
-  id:           'imageExtractionStep',
-  description:  'Downloads image from Meta CDN and runs Gemini Vision for food macro extraction.',
-  inputSchema:  pipelineSchema,
+  id: 'imageExtractionStep',
+  description: 'Downloads image from Meta CDN and runs Gemini Vision for food macro extraction.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     if (!inputData.shouldProcess) return inputData
@@ -221,17 +226,21 @@ const imageExtractionStep = createStep({
 
       if (!mediaId) throw new Error('No media_id in raw_body for image message')
 
-      const stored = await downloadAndStoreWhatsAppMedia(mediaId, inputData.wam_id)
+      const stored = await downloadAndStoreWhatsAppMedia(
+        inputData.trainer_id,
+        mediaId,
+        inputData.wam_id,
+      )
       publicUrl = stored.publicUrl
 
-      const { text } = await generateText({
-        model: geminiModels.primary,
+      // AI-GATEWAY-ENFORCED
+      const { text: visionText } = await runAI({
         messages: [
           {
-            role:    'user',
+            role: 'user',
             content: [
               {
-                type:  'image',
+                type: 'image',
                 image: publicUrl,
               },
               {
@@ -251,9 +260,11 @@ Return only the JSON object. No explanation.`,
             ],
           },
         ],
+        feature: 'meal-logging',
+        workflow: 'whatsappPipeline',
       })
 
-      visionResult = text ?? null
+      visionResult = visionText ?? null
     } catch (err) {
       console.error('[imageExtractionStep] vision failed for wam_id', inputData.wam_id, (err as Error).message)
       visionResult = null
@@ -262,8 +273,8 @@ Return only the JSON object. No explanation.`,
     return {
       ...inputData,
       extractedContent: visionResult ?? '[image_analysis_failed]',
-      mediaUrl:         publicUrl,
-      intent:           'meal_log',
+      mediaUrl: publicUrl,
+      intent: 'meal_log',
     }
   },
 })
@@ -271,9 +282,9 @@ Return only the JSON object. No explanation.`,
 // ─── Branch Step C: Text / interactive pass-through ──────────────────────────
 
 const textExtractionStep = createStep({
-  id:           'textExtractionStep',
-  description:  'Passes text or poll response through for downstream structuring.',
-  inputSchema:  pipelineSchema,
+  id: 'textExtractionStep',
+  description: 'Passes text or poll response through for downstream structuring.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     if (!inputData.shouldProcess) return inputData
@@ -297,9 +308,9 @@ const textExtractionStep = createStep({
 // ─── Step 5: Unified macro structuring via Gemini ────────────────────────────
 
 const unifyExtractionStep = createStep({
-  id:           'unifyExtractionStep',
-  description:  'Reads branch output (keyed by step id) and uses Gemini to structure food log macros.',
-  inputSchema:  branchOutputSchema,
+  id: 'unifyExtractionStep',
+  description: 'Reads branch output (keyed by step id) and uses Gemini to structure food log macros.',
+  inputSchema: branchOutputSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     // Branch outputs are keyed by step id — read whichever ran
@@ -327,12 +338,12 @@ const unifyExtractionStep = createStep({
         }
         return {
           ...state,
-          food_name:          parsed.food_name ?? null,
+          food_name: parsed.food_name ?? null,
           estimated_calories: parsed.estimated_calories ?? null,
-          protein_g:          parsed.protein_g ?? null,
-          carbs_g:            parsed.carbs_g ?? null,
-          fat_g:              parsed.fat_g ?? null,
-          serving_size:       parsed.serving_size ?? null,
+          protein_g: parsed.protein_g ?? null,
+          carbs_g: parsed.carbs_g ?? null,
+          fat_g: parsed.fat_g ?? null,
+          serving_size: parsed.serving_size ?? null,
         }
       } catch {
         // Fall through to Gemini parsing below
@@ -350,25 +361,19 @@ const unifyExtractionStep = createStep({
     } | null = null
 
     try {
-      const { text } = await generateText({
-        model: geminiModels.primary,
-        messages: [
-          {
-            role:    'system',
-            content: 'You are a nutritional data extraction engine. Extract macro data from food descriptions. Always return valid JSON. For unknown quantities, use 0.',
-          },
-          {
-            role:    'user',
-            content: `Extract nutritional data from this food description and return JSON:
+      // AI-GATEWAY-ENFORCED
+      const { text: structuredText } = await runAI({
+        system: 'You are a nutritional data extraction engine. Extract macro data from food descriptions. Always return valid JSON. For unknown quantities, use 0.',
+        prompt: `Extract nutritional data from this food description and return JSON:
 "${state.extractedContent}"
 
 Return exactly:
 {"food_name":"string","estimated_calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"serving_size":"string"}`,
-          },
-        ],
+        feature: 'meal-logging',
+        workflow: 'whatsappPipeline',
       })
 
-      const clean = (text ?? '').replace(/```json|```/g, '').trim()
+      const clean = (structuredText ?? '').replace(/```json|```/g, '').trim()
       structuredJson = JSON.parse(clean)
     } catch (err) {
       console.error('[unifyExtractionStep] structuring failed for wam_id', state.wam_id, (err as Error).message)
@@ -376,12 +381,12 @@ Return exactly:
 
     return {
       ...state,
-      food_name:          structuredJson?.food_name ?? null,
+      food_name: structuredJson?.food_name ?? null,
       estimated_calories: structuredJson?.estimated_calories ?? null,
-      protein_g:          structuredJson?.protein_g ?? null,
-      carbs_g:            structuredJson?.carbs_g ?? null,
-      fat_g:              structuredJson?.fat_g ?? null,
-      serving_size:       structuredJson?.serving_size ?? null,
+      protein_g: structuredJson?.protein_g ?? null,
+      carbs_g: structuredJson?.carbs_g ?? null,
+      fat_g: structuredJson?.fat_g ?? null,
+      serving_size: structuredJson?.serving_size ?? null,
     }
   },
 })
@@ -389,9 +394,9 @@ Return exactly:
 // ─── Step 6: Database write ───────────────────────────────────────────────────
 
 const databaseTransactionStep = createStep({
-  id:           'databaseTransaction',
-  description:  'Persists structured food log to DB with ON CONFLICT DO NOTHING on wam_id.',
-  inputSchema:  pipelineSchema,
+  id: 'databaseTransaction',
+  description: 'Persists structured food log to DB with ON CONFLICT DO NOTHING on wam_id.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     if (!inputData.shouldProcess || !inputData.clientId) {
@@ -411,16 +416,16 @@ const databaseTransactionStep = createStep({
         inputData.wam_id,
         `${inputData.food_name ?? 'unknown'} | intent:${inputData.intent ?? 'unknown'}`,
         inputData.estimated_calories ?? null,
-        inputData.protein_g          ?? null,
-        inputData.carbs_g            ?? null,
-        inputData.fat_g              ?? null,
+        inputData.protein_g ?? null,
+        inputData.carbs_g ?? null,
+        inputData.fat_g ?? null,
       ],
     )
 
     return {
       ...inputData,
-      success:    result.rows.length > 0,
-      logId:      result.rows[0]?.id ?? null,
+      success: result.rows.length > 0,
+      logId: result.rows[0]?.id ?? null,
       skipReason: result.rows.length === 0 ? 'conflict_on_wam_id' : (inputData.skipReason ?? null),
     }
   },
@@ -429,9 +434,9 @@ const databaseTransactionStep = createStep({
 // ─── Step 7: Outbound confirmation message ───────────────────────────────────
 
 const sendOutboundNotificationStep = createStep({
-  id:           'sendOutboundNotification',
-  description:  'Sends a WhatsApp confirmation or clarification message back to the client.',
-  inputSchema:  pipelineSchema,
+  id: 'sendOutboundNotification',
+  description: 'Sends a WhatsApp confirmation or clarification message back to the client.',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
   execute: async ({ inputData }): Promise<PipelineState> => {
     if (!inputData.shouldProcess || !inputData.client_phone) return inputData
@@ -446,10 +451,10 @@ const sendOutboundNotificationStep = createStep({
         inputData.estimated_calories !== undefined
 
       if (inputData.success && hasMacros) {
-        const cal  = Math.round(inputData.estimated_calories ?? 0)
-        const prot = (inputData.protein_g  ?? 0).toFixed(1)
-        const carb = (inputData.carbs_g    ?? 0).toFixed(1)
-        const fat  = (inputData.fat_g      ?? 0).toFixed(1)
+        const cal = Math.round(inputData.estimated_calories ?? 0)
+        const prot = (inputData.protein_g ?? 0).toFixed(1)
+        const carb = (inputData.carbs_g ?? 0).toFixed(1)
+        const fat = (inputData.fat_g ?? 0).toFixed(1)
         const name = inputData.food_name ?? 'Meal'
 
         message = `Logged: ${name} (Estimated: ${cal} kcal • P: ${prot}g • C: ${carb}g • F: ${fat}g). Keep up the great work!`
@@ -459,7 +464,7 @@ const sendOutboundNotificationStep = createStep({
         return inputData
       }
 
-      await sendWhatsAppTextMessage(inputData.client_phone, message)
+      await sendWhatsAppTextMessage(inputData.trainer_id, inputData.client_phone, message)
     } catch (err) {
       console.error('[sendOutboundNotification] failed for wam_id', inputData.wam_id, (err as Error).message)
     }
@@ -471,19 +476,19 @@ const sendOutboundNotificationStep = createStep({
 // ─── Pipeline assembly ────────────────────────────────────────────────────────
 
 export const whatsappPipeline = createWorkflow({
-  id:           'whatsappPipeline',
-  inputSchema:  pipelineSchema,
+  id: 'whatsappPipeline',
+  inputSchema: pipelineSchema,
   outputSchema: pipelineSchema,
 })
-  .then(validateWebhookStep          as any)
-  .then(subscriptionCheckStep        as any)
-  .then(multimodalIngestionStep      as any)
+  .then(validateWebhookStep as any)
+  .then(subscriptionCheckStep as any)
+  .then(multimodalIngestionStep as any)
   .branch([
     [async (params: any) => params.inputData?.message_type === 'audio', audioExtractionStep as any],
     [async (params: any) => params.inputData?.message_type === 'image', imageExtractionStep as any],
     [async (params: any) => params.inputData?.message_type !== 'audio' && params.inputData?.message_type !== 'image', textExtractionStep as any],
   ])
-  .then(unifyExtractionStep          as any)
-  .then(databaseTransactionStep      as any)
+  .then(unifyExtractionStep as any)
+  .then(databaseTransactionStep as any)
   .then(sendOutboundNotificationStep as any)
   .commit()

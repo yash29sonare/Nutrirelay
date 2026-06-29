@@ -2,8 +2,9 @@ import { createTool } from '@mastra/core/tools'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { getTrainerWaba } from '@/lib/waba/getTrainerWaba'
+import { logCommunication } from '@/lib/communication-logger'
+import type { ToolExecutionContext } from '@mastra/core/tools'
 
-// Resolve trainer_id from client_id via trainer_clients join
 async function resolveTrainerId(clientId: string): Promise<string | null> {
   const db = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,19 +22,26 @@ async function resolveTrainerId(clientId: string): Promise<string | null> {
 }
 
 export const sendWhatsApp = createTool({
-  id:          'sendWhatsApp',
+  id: 'sendWhatsApp',
   description: 'Sends a free-form text message to a WhatsApp phone number via the trainer\'s own WABA credentials.',
   inputSchema: z.object({
-    clientId:       z.string().describe('The client UUID — used to resolve the owning trainer\'s WABA credentials'),
+    clientId: z.string().describe('The client UUID — used to resolve the owning trainer\'s WABA credentials'),
     recipientPhone: z.string(),
-    messageText:    z.string(),
+    messageText: z.string(),
   }),
   outputSchema: z.object({
     success: z.boolean(),
-    wamid:   z.string().optional(),
+    wamid: z.string().optional(),
   }),
-  execute: async ({ context }: { context: { clientId: string; recipientPhone: string; messageText: string } }) => {
-    const { clientId, recipientPhone, messageText } = context
+  execute: async (
+    inputData: {
+      clientId: string
+      recipientPhone: string
+      messageText: string
+    },
+    context: ToolExecutionContext<any, any, any>,
+  ) => {
+    const { clientId, recipientPhone, messageText } = inputData
 
     const trainerId = await resolveTrainerId(clientId)
     if (!trainerId) {
@@ -43,21 +51,21 @@ export const sendWhatsApp = createTool({
 
     const { phoneNumberId, accessToken } = await getTrainerWaba(trainerId)
 
-    const url  = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`
+    const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`
     const body = {
       messaging_product: 'whatsapp',
-      recipient_type:    'individual',
-      to:                recipientPhone,
-      type:              'text',
-      text:              { body: messageText, preview_url: false },
+      recipient_type: 'individual',
+      to: recipientPhone,
+      type: 'text',
+      text: { body: messageText, preview_url: false },
     }
 
     let res: Response
     try {
       res = await fetch(url, {
-        method:  'POST',
+        method: 'POST',
         headers: {
-          Authorization:  `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
@@ -80,10 +88,22 @@ export const sendWhatsApp = createTool({
       return { success: false }
     }
 
-    const json = await res.json() as { messages?: Array<{ id: string }> }
+    const json = (await res.json()) as { messages?: Array<{ id: string }> }
+    const wamid = json.messages?.[0]?.id
+
+    await logCommunication({
+      trainer_id: trainerId,
+      client_id: clientId,
+      direction: "OUTBOUND",
+      message_type: "TEXT",
+      wam_id: wamid,
+      delivery_status: "sent",
+      metadata: { tool: "sendWhatsApp" },
+    })
+
     return {
       success: true,
-      wamid:   json.messages?.[0]?.id,
+      wamid,
     }
   },
 })

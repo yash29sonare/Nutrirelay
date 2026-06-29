@@ -4,7 +4,8 @@ import { parseMeal }    from '../tools/mealParser'
 import { logFood }      from '../tools/foodLogger'
 import { sendWhatsApp } from '../tools/whatsAppSender'
 
-const COACH_PROMPT = `You are Fortress Coach — the primary AI assistant for an Indian fitness tracking system delivered over WhatsApp.
+function buildCoachInstructions(clientContext?: Record<string, any>): string {
+  const base = `You are Fortress Coach — the primary AI assistant for an Indian fitness tracking system delivered over WhatsApp.
 
 ROLE:
 You help clients log their meals, track macronutrients, and stay accountable to their trainer. You are warm, precise, and IST-timezone aware.
@@ -32,14 +33,60 @@ SCOPE:
 - Encouraging check-in messages
 - Out-of-scope requests: decline politely and redirect to meal tracking.`
 
-export const fortressCoach = new Agent({
-  id:           'fortress-coach',
-  name:         'Fortress Coach',
-  instructions: COACH_PROMPT,
-  model:        agentModelFallbacks,
-  tools: {
-    parseMeal,
-    logFood,
-    sendWhatsApp,
-  },
-})
+  if (!clientContext) return base
+
+  const ctx = clientContext
+  const contextBlocks: string[] = []
+
+  if (ctx.goal?.goal_type) {
+    contextBlocks.push(`CLIENT GOAL: ${ctx.goal.goal_type}`)
+    if (ctx.goal.target_weight != null && ctx.goal.starting_weight != null) {
+      contextBlocks.push(
+        `Weight: start ${ctx.goal.starting_weight}kg → target ${ctx.goal.target_weight}kg ` +
+        `(current ${ctx.goal.current_weight ?? '?'}kg)`
+      )
+    }
+    if (ctx.goal.target_date) {
+      contextBlocks.push(`Target date: ${ctx.goal.target_date}`)
+    }
+  }
+
+  if (ctx.health?.allergies?.length) {
+    contextBlocks.push(`ALLERGIES: ${ctx.health.allergies.join(', ')}`)
+  }
+  if (ctx.health?.food_restrictions?.length) {
+    contextBlocks.push(`RESTRICTIONS: ${ctx.health.food_restrictions.join(', ')}`)
+  }
+  if (ctx.health?.diet_type) {
+    contextBlocks.push(`Diet type: ${ctx.health.diet_type}`)
+  }
+
+  if (ctx.preferences?.preferred_language) {
+    contextBlocks.push(`Preferred language: ${ctx.preferences.preferred_language}`)
+  }
+  if (ctx.workout?.workout_time) {
+    contextBlocks.push(`Preferred workout time: ${ctx.workout.workout_time}`)
+  }
+
+  if (contextBlocks.length > 0) {
+    return base + `\n\nCLIENT CONTEXT:\n${contextBlocks.join('\n')}`
+  }
+
+  return base
+}
+
+export function getCoachAgent(clientContext?: Record<string, any>): Agent<any> {
+  return new Agent({
+    id:           'fortress-coach',
+    name:         'Fortress Coach',
+    instructions: buildCoachInstructions(clientContext),
+    model:        agentModelFallbacks,
+    tools: {
+      parseMeal,
+      logFood,
+      sendWhatsApp,
+    },
+  })
+}
+
+export const fortressCoach = getCoachAgent()

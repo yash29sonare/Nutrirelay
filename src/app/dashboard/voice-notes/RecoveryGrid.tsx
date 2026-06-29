@@ -2,8 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { resolveWithTranscript, retranscribeNote } from "./actions";
+import { formatDateTime } from "@/lib/format";
+import { InlineNotice } from "@/components/ui/InlineNotice";
 import { Mic, RefreshCw, Check } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Textarea } from "@/components/ui/Textarea";
 
 export interface VoiceNoteRow {
   id: string;
@@ -17,16 +21,6 @@ export interface VoiceNoteRow {
 
 interface RecoveryGridProps {
   initialRows: VoiceNoteRow[];
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function NoteCard({
@@ -95,18 +89,16 @@ function NoteCard({
             </div>
           </div>
 
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleRetranscribe}
             disabled={retrying || saving}
             aria-label="Re-trigger AI transcription"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--surface-overlay)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            icon={<RefreshCw size={12} className={retrying ? "animate-spin" : ""} />}
           >
-            <RefreshCw
-              size={12}
-              className={retrying ? "animate-spin" : ""}
-            />
             {retrying ? "Retrying…" : "Retry AI"}
-          </button>
+          </Button>
         </div>
 
         {/* HTML5 audio player */}
@@ -125,37 +117,32 @@ function NoteCard({
           >
             Manual transcript override
           </label>
-          <textarea
+          <Textarea
             id={`transcript-${row.id}`}
             rows={3}
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             disabled={saving || retrying}
             placeholder="Type what you heard…"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--surface-border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-brand-500/40 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
 
         {/* Error */}
         {error && (
-          <p role="alert" className="text-xs text-red-500">
-            {error}
-          </p>
+          <InlineNotice>{error}</InlineNotice>
         )}
 
         {/* Save button */}
-        <button
+        <Button
+          variant="brand"
+          size="md"
           onClick={handleSave}
           disabled={saving || retrying || !transcript.trim()}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          loading={saving}
+          icon={saving ? undefined : <Check size={14} />}
         >
-          {saving ? (
-            <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-          ) : (
-            <Check size={14} />
-          )}
           {saving ? "Saving…" : "Save transcript"}
-        </button>
+        </Button>
       </CardContent>
     </Card>
   );
