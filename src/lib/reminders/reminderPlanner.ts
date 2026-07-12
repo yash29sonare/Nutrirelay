@@ -12,20 +12,123 @@ import {
 
 type RuleFn = () => RuleResult | null
 
+export interface ClientRoutineTiming {
+  wakeTime?: string | null
+  breakfastTime?: string | null
+  lunchTime?: string | null
+  snackTime?: string | null
+  dinnerTime?: string | null
+  workoutTime?: string | null
+  restDays?: string[] | null
+  postWorkoutDelayMinutes?: number | null
+  preWorkoutOffsetMinutes?: number | null
+  skippedMeals?: string[] | null
+}
+
+function hasSkippedMeal(routine: ClientRoutineTiming | null | undefined, mealType: string): boolean {
+  return Array.isArray(routine?.skippedMeals)
+    && routine.skippedMeals.some((value) => value.toLowerCase() === mealType)
+}
+
 function planId(seed: string): string {
   return `rem-${seed}-${Date.now()}`
 }
 
-function buildSchedule(reason: ReminderReason): ReminderSchedule {
+function getRoutineAnchoredWindow(anchorTime: string): {
+  earliestTriggerAt: string
+  latestTriggerAt: string
+} | null {
+  const [hourText, minuteText] = anchorTime.split(":")
+  const hour = Number.parseInt(hourText ?? "", 10)
+  const minute = Number.parseInt(minuteText ?? "", 10)
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return null
+  }
+
+  const now = new Date()
+  const anchored = new Date(now)
+  anchored.setHours(hour, minute, 0, 0)
+
+  if (anchored.getTime() <= now.getTime()) {
+    anchored.setDate(anchored.getDate() + 1)
+  }
+
+  const latest = new Date(anchored.getTime() + 60 * 60 * 1000)
+
+  return {
+    earliestTriggerAt: anchored.toISOString(),
+    latestTriggerAt: latest.toISOString(),
+  }
+}
+
+function addMinutesToTime(time: string, minutesToAdd: number): string | null {
+  const [hourText, minuteText] = time.split(":")
+  const hour = Number.parseInt(hourText ?? "", 10)
+  const minute = Number.parseInt(minuteText ?? "", 10)
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return null
+  }
+
+  const total = (((hour * 60 + minute + minutesToAdd) % 1440) + 1440) % 1440
+  const nextHour = Math.floor(total / 60).toString().padStart(2, "0")
+  const nextMinute = (total % 60).toString().padStart(2, "0")
+  return `${nextHour}:${nextMinute}`
+}
+
+export function resolveRoutineAnchorTime(
+  reason: ReminderReason,
+  routine?: ClientRoutineTiming | null,
+  fallback?: string | null,
+  referenceDate: Date = new Date(),
+): string | null {
+  if (!routine) return fallback ?? null
+
+  if (reason === "daily_check_in") {
+    return routine.wakeTime ?? fallback ?? null
+  }
+
+  if (reason !== "meal_overdue") {
+    return fallback ?? null
+  }
+
+  const weekday = referenceDate.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" }).toLowerCase()
+  const isRestDay = Array.isArray(routine.restDays) && routine.restDays.map((day) => day.toLowerCase()).includes(weekday)
+
+  if (!isRestDay && routine.workoutTime && routine.postWorkoutDelayMinutes !== null && routine.postWorkoutDelayMinutes !== undefined) {
+    return addMinutesToTime(routine.workoutTime, 60 + routine.postWorkoutDelayMinutes) ?? routine.dinnerTime ?? fallback ?? null
+  }
+
+  const mealAnchors = [
+    routine.lunchTime,
+    routine.snackTime,
+    routine.dinnerTime,
+    !hasSkippedMeal(routine, "breakfast") ? routine.breakfastTime : null,
+  ]
+
+  return mealAnchors.find((value) => Boolean(value)) ?? fallback ?? null
+}
+
+function buildSchedule(
+  reason: ReminderReason,
+  routineAnchorTime?: string | null,
+  routine?: ClientRoutineTiming | null,
+): ReminderSchedule {
   const now = Date.now()
   const hourMs = 60 * 60 * 1000
+  const resolvedAnchor = resolveRoutineAnchorTime(reason, routine, routineAnchorTime)
+  const anchoredWindow =
+    resolvedAnchor && (reason === "meal_overdue" || reason === "daily_check_in")
+      ? getRoutineAnchoredWindow(resolvedAnchor)
+      : null
 
   switch (reason) {
     case "meal_overdue":
     case "daily_check_in":
       return {
-        earliestTriggerAt: new Date(now + hourMs).toISOString(),
-        latestTriggerAt: new Date(now + 2 * hourMs).toISOString(),
+        earliestTriggerAt: anchoredWindow?.earliestTriggerAt ?? new Date(now + hourMs).toISOString(),
+        latestTriggerAt: anchoredWindow?.latestTriggerAt ?? new Date(now + 2 * hourMs).toISOString(),
         maxRepeatCount: 3,
         repeatIntervalMs: 2 * hourMs,
       }
@@ -103,6 +206,8 @@ export function planClientReminders(
     events: EngagementEvent[]
     mealsToday: number
     lastMealTimestamp: string | null
+    routineAnchorTime?: string | null
+    routine?: ClientRoutineTiming | null
   },
 ): { plans: ReminderPlan[]; events: EngagementEventInput[] } {
   const now = new Date().toISOString()
@@ -119,7 +224,7 @@ export function planClientReminders(
   for (const rule of rules) {
     const result = rule()
     if (result && result.triggered) {
-      const schedule = buildSchedule(result.reason)
+      const schedule = buildSchedule(result.reason, input.routineAnchorTime, input.routine)
       const context = buildContext(clientId, trainerId, result, input.meals, input.events)
       const status: ReminderStatus = schedule.earliestTriggerAt <= now ? "active" : "planned"
 
@@ -151,6 +256,8 @@ export function planTrainerReminders(
     events: EngagementEvent[]
     mealsToday: number
     lastMealTimestamp: string | null
+    routineAnchorTime?: string | null
+    routine?: ClientRoutineTiming | null
   }>,
 ): { plans: ReminderPlan[]; events: EngagementEventInput[] } {
   const allPlans: ReminderPlan[] = []
@@ -162,6 +269,8 @@ export function planTrainerReminders(
       events: data.events,
       mealsToday: data.mealsToday,
       lastMealTimestamp: data.lastMealTimestamp,
+      routineAnchorTime: data.routineAnchorTime,
+      routine: data.routine,
     })
     allPlans.push(...result.plans)
     allEvents.push(...result.events)
@@ -178,6 +287,8 @@ export async function planReminders(
     events: EngagementEvent[]
     mealsToday: number
     lastMealTimestamp: string | null
+    routineAnchorTime?: string | null
+    routine?: ClientRoutineTiming | null
   }>,
   persistEvents: (events: EngagementEventInput[]) => Promise<void>,
 ): Promise<ReminderPlan[]> {

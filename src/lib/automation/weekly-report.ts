@@ -16,6 +16,7 @@ function getDb() {
 }
 
 interface ClientLink {
+  trainer_id: string;
   client_id: string;
   profiles: { full_name: string | null; phone_number: string | null } | null;
 }
@@ -26,7 +27,67 @@ interface FoodLogRow {
   carbs_g: number | null;
   fat_g: number | null;
   verification_status: string;
+  review_state?: string | null;
   logged_at: string;
+}
+
+export interface WeeklyClientSummaryInput {
+  foodLogs: Array<FoodLogRow & { review_state?: string | null }>;
+  communicationLogs: Array<{
+    direction?: string | null;
+    message_type?: string | null;
+    metadata?: Record<string, unknown> | null;
+    created_at?: string | null;
+  }>;
+  goal?: {
+    goal_type?: string | null;
+    target_weight?: number | null;
+    starting_weight?: number | null;
+    current_weight?: number | null;
+  } | null;
+  healthProfile?: {
+    weight_kg?: number | null;
+  } | null;
+  workoutSchedule?: {
+    workout_time?: string | null;
+    rest_days?: string[] | null;
+    checkin_preference?: string | null;
+    breakfast_time?: string | null;
+    lunch_time?: string | null;
+    snack_time?: string | null;
+    dinner_time?: string | null;
+  } | null;
+}
+
+export interface WeeklyClientReportSummary {
+  mealsLogged: number;
+  followedMeals: number;
+  skippedMeals: number;
+  outsideFoodEvents: number;
+  alternativeMeals: number;
+  reviewNeededItems: number;
+  macroTotals: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  goalContext: {
+    goalType: string | null;
+    startingWeight: number | null;
+    currentWeight: number | null;
+    targetWeight: number | null;
+    weightChange: number | null;
+  };
+  routineConsistency: {
+    activeLogDays: number;
+    hasRoutineTimes: boolean;
+    workoutTime: string | null;
+    restDays: string[];
+    checkinPreference: string | null;
+  };
+  projection: "on_track" | "behind" | "ahead" | "insufficient_data";
+  trainerNotes: string[];
 }
 
 interface WeeklyAggregate {
@@ -49,6 +110,24 @@ export interface WeeklyReportSummary {
   sent: number;
   skippedNoData: number;
   errors: number;
+}
+
+export function getAmbiguousWeeklyReportClientIds(
+  links: Array<Pick<ClientLink, "trainer_id" | "client_id">>,
+): Set<string> {
+  const trainerIdsByClient = new Map<string, Set<string>>();
+
+  for (const link of links) {
+    const trainerIds = trainerIdsByClient.get(link.client_id) ?? new Set<string>();
+    trainerIds.add(link.trainer_id);
+    trainerIdsByClient.set(link.client_id, trainerIds);
+  }
+
+  return new Set(
+    [...trainerIdsByClient.entries()]
+      .filter(([, trainerIds]) => trainerIds.size > 1)
+      .map(([clientId]) => clientId),
+  );
 }
 
 // ── Aggregate a week of food logs into report metrics ──────────────────────────
@@ -94,6 +173,105 @@ function aggregate(logs: FoodLogRow[]): WeeklyAggregate {
     streakDays: daysWithLogs.size,
     complianceScore,
     riskLabel,
+  };
+}
+
+export function buildWeeklyClientReportSummary(input: WeeklyClientSummaryInput): WeeklyClientReportSummary {
+  const logs = input.foodLogs;
+  const communicationLogs = input.communicationLogs;
+  const activeLogDays = new Set(logs.map((log) => log.logged_at.slice(0, 10))).size;
+  const macroTotals = logs.reduce(
+    (totals, log) => ({
+      calories: totals.calories + Number(log.calories ?? 0),
+      protein: totals.protein + Number(log.protein_g ?? 0),
+      carbs: totals.carbs + Number(log.carbs_g ?? 0),
+      fat: totals.fat + Number(log.fat_g ?? 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+
+  let followedMeals = 0;
+  let skippedMeals = 0;
+  let outsideFoodEvents = 0;
+  let alternativeMeals = 0;
+
+  for (const log of communicationLogs) {
+    const metadata = log.metadata ?? {};
+    const structured = metadata["structured_response"];
+    const adherence = typeof metadata["adherence_status"] === "string"
+      ? metadata["adherence_status"]
+      : structured && typeof structured === "object" && "adherence_status" in structured
+        ? String((structured as Record<string, unknown>)["adherence_status"])
+        : null;
+    const selected = structured && typeof structured === "object"
+      ? String((structured as Record<string, unknown>)["selected_option"] ?? "")
+      : "";
+    const combined = `${adherence ?? ""} ${selected}`.toLowerCase();
+
+    if (combined.includes("follow")) followedMeals++;
+    if (combined.includes("skip")) skippedMeals++;
+    if (combined.includes("outside")) outsideFoodEvents++;
+    if (combined.includes("alternative")) alternativeMeals++;
+  }
+
+  const reviewNeededItems = logs.filter((log) =>
+    log.review_state === "needs_review" ||
+    log.review_state === "pending" ||
+    log.verification_status === "NEEDS_REVIEW",
+  ).length;
+
+  const startingWeight = input.goal?.starting_weight ?? null;
+  const currentWeight = input.goal?.current_weight ?? input.healthProfile?.weight_kg ?? null;
+  const targetWeight = input.goal?.target_weight ?? null;
+  const weightChange = startingWeight !== null && currentWeight !== null
+    ? Math.round((currentWeight - startingWeight) * 10) / 10
+    : null;
+  let projection: WeeklyClientReportSummary["projection"] = "insufficient_data";
+  if (targetWeight !== null && currentWeight !== null && startingWeight !== null && startingWeight !== targetWeight) {
+    const desiredDirection = targetWeight > startingWeight ? 1 : -1;
+    const actualDirection = currentWeight > startingWeight ? 1 : currentWeight < startingWeight ? -1 : 0;
+    projection = actualDirection === 0 ? "behind" : actualDirection === desiredDirection ? "on_track" : "behind";
+  } else if (logs.length >= 7 || followedMeals > 0) {
+    projection = skippedMeals + outsideFoodEvents > followedMeals ? "behind" : "on_track";
+  }
+
+  const schedule = input.workoutSchedule;
+  const hasRoutineTimes = Boolean(schedule?.breakfast_time || schedule?.lunch_time || schedule?.snack_time || schedule?.dinner_time);
+  const trainerNotes = [
+    `${logs.length} meals logged across ${activeLogDays} day${activeLogDays === 1 ? "" : "s"}.`,
+    `${reviewNeededItems} item${reviewNeededItems === 1 ? "" : "s"} need trainer review.`,
+    projection === "behind" ? "Trend is behind the stated goal or adherence pattern." : null,
+  ].filter((note): note is string => Boolean(note));
+
+  return {
+    mealsLogged: logs.length,
+    followedMeals,
+    skippedMeals,
+    outsideFoodEvents,
+    alternativeMeals,
+    reviewNeededItems,
+    macroTotals: {
+      calories: Math.round(macroTotals.calories),
+      protein: Math.round(macroTotals.protein * 10) / 10,
+      carbs: Math.round(macroTotals.carbs * 10) / 10,
+      fat: Math.round(macroTotals.fat * 10) / 10,
+    },
+    goalContext: {
+      goalType: input.goal?.goal_type ?? null,
+      startingWeight,
+      currentWeight,
+      targetWeight,
+      weightChange,
+    },
+    routineConsistency: {
+      activeLogDays,
+      hasRoutineTimes,
+      workoutTime: schedule?.workout_time ?? null,
+      restDays: schedule?.rest_days ?? [],
+      checkinPreference: schedule?.checkin_preference ?? null,
+    },
+    projection,
+    trainerNotes,
   };
 }
 
@@ -191,7 +369,7 @@ export async function generateWeeklyReports(): Promise<WeeklyReportSummary> {
   const { data: links, error } = await db
     .from("trainer_clients")
     .select(
-      `client_id, profiles!trainer_clients_client_id_fkey(full_name, phone_number)`
+      `trainer_id, client_id, profiles!trainer_clients_client_id_fkey(full_name, phone_number)`
     )
     .eq("is_active", true);
 
@@ -202,18 +380,30 @@ export async function generateWeeklyReports(): Promise<WeeklyReportSummary> {
 
   if (!links || links.length === 0) return summary;
 
+  const ambiguousClientIds = getAmbiguousWeeklyReportClientIds(links as unknown as ClientLink[]);
+
   for (const raw of links as unknown as ClientLink[]) {
     const profile = Array.isArray(raw.profiles) ? raw.profiles[0] : raw.profiles;
+    const trainerId = raw.trainer_id;
     const clientId = raw.client_id;
     const clientName = String(profile?.full_name ?? "there");
     summary.evaluated++;
 
     try {
+      if (ambiguousClientIds.has(clientId)) {
+        summary.errors++;
+        console.error(
+          `[weekly-report] skipped client ${clientId} because multiple active trainer links exist`,
+        );
+        continue;
+      }
+
       // 1. Aggregate the week's logs
       const { data: logs } = await db
         .from("food_logs")
         .select("calories, protein_g, carbs_g, fat_g, verification_status, logged_at")
         .eq("client_id", clientId)
+        .eq("trainer_id", trainerId)
         .gte("logged_at", weekStartIso);
 
       const foodLogs = (logs ?? []) as FoodLogRow[];
@@ -233,7 +423,7 @@ export async function generateWeeklyReports(): Promise<WeeklyReportSummary> {
       summary.generated++;
 
       // 4. Upload to storage
-      const storagePath = `${clientId}/${weekStartDate}.pdf`;
+      const storagePath = `${trainerId}/${clientId}/${weekStartDate}.pdf`;
       const { error: uploadError } = await db.storage
         .from(REPORTS_BUCKET)
         .upload(storagePath, pdfBuffer, {
@@ -270,6 +460,7 @@ export async function generateWeeklyReports(): Promise<WeeklyReportSummary> {
         if (signed?.signedUrl) {
           try {
             await sendDocumentMessage(
+              trainerId,
               String(profile.phone_number),
               signed.signedUrl,
               `Fortress-Weekly-${weekStartDate}.pdf`,

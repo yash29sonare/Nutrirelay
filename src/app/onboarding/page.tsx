@@ -5,20 +5,17 @@ import { Stepper } from "@/components/ui/Stepper";
 import { Button } from "@/components/ui/Button";
 import { StepWelcome } from "@/components/onboarding/steps/StepWelcome";
 import { StepProfile } from "@/components/onboarding/steps/StepProfile";
-import { StepCoaching } from "@/components/onboarding/steps/StepCoaching";
-import { StepBusiness } from "@/components/onboarding/steps/StepBusiness";
 import { StepComplete } from "@/components/onboarding/steps/StepComplete";
 import { useOnboardingForm } from "@/components/onboarding/use-onboarding";
 import { STEP_LABELS } from "@/components/onboarding/onboarding-types";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ErrorBanner } from "@/components/ui/StatusBanner";
 
 const STEPS = STEP_LABELS.map((label) => ({ label }));
 
 const STEP_COMPONENTS = [
   StepWelcome,
   StepProfile,
-  StepCoaching,
-  StepBusiness,
   StepComplete,
 ];
 
@@ -27,11 +24,11 @@ export default function OnboardingPage() {
     form,
     currentStep,
     showSuccess,
+    submitting,
+    submitError,
     totalSteps,
     goToNextStep,
     goToPrevStep,
-    isFirstStep,
-    isLastStep,
   } = useOnboardingForm();
 
   if (showSuccess) {
@@ -44,7 +41,7 @@ export default function OnboardingPage() {
 
   const StepComponent = STEP_COMPONENTS[currentStep];
   const isWelcomeStep = currentStep === 0;
-  const isCompleteStep = currentStep === totalSteps - 1;
+  const isLastStep = currentStep === totalSteps - 1;
 
   return (
     <div className="flex-1 flex flex-col">
@@ -67,55 +64,69 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      {/* Bottom navigation — hidden on welcome and complete steps */}
-      {!isWelcomeStep && !isCompleteStep && (
-        <div className="px-4 sm:px-6 py-4 border-t border-[var(--surface-border)] bg-[var(--surface-raised)]">
-          <div className="max-w-lg mx-auto flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goToPrevStep}
-              icon={<ArrowLeft size={14} />}
-            >
-              Back
-            </Button>
-
-            <span className="text-xs text-[var(--muted)]">
-              Step {currentStep + 1} of {totalSteps}
-            </span>
-
-            <Button
-              variant="brand"
-              size="sm"
-              onClick={goToNextStep}
-              icon={<ArrowRight size={14} />}
-            >
-              Continue
-            </Button>
+      {/* Error */}
+      {submitError && !isWelcomeStep && (
+        <div className="px-4 sm:px-6 py-2">
+          <div className="max-w-lg mx-auto">
+            <ErrorBanner>{submitError}</ErrorBanner>
           </div>
         </div>
       )}
 
-      {/* Complete step has its own CTA */}
-      {!isWelcomeStep && isCompleteStep && (
+      {/* Bottom navigation — hidden on welcome step */}
+      {!isWelcomeStep && (
         <div className="px-4 sm:px-6 py-4 border-t border-[var(--surface-border)] bg-[var(--surface-raised)]">
           <div className="max-w-lg mx-auto flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goToPrevStep}
-              icon={<ArrowLeft size={14} />}
-            >
-              Back
-            </Button>
+            {!isLastStep ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={goToPrevStep}
+                  icon={<ArrowLeft size={14} />}
+                >
+                  Back
+                </Button>
 
-            <span className="text-xs text-[var(--muted)]">
-              Step {currentStep + 1} of {totalSteps}
-            </span>
+                <span className="text-xs text-[var(--muted)]">
+                  Step {currentStep + 1} of {totalSteps}
+                </span>
 
-            <Button variant="brand" size="sm" onClick={goToNextStep}>
-              Complete Setup
-            </Button>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={goToNextStep}
+                  icon={<ArrowRight size={14} />}
+                >
+                  Continue
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={goToPrevStep}
+                  icon={<ArrowLeft size={14} />}
+                >
+                  Back
+                </Button>
+
+                <span className="text-xs text-[var(--muted)]">
+                  Step {currentStep + 1} of {totalSteps}
+                </span>
+
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={goToNextStep}
+                  loading={submitting}
+                  disabled={submitting}
+                >
+                  {submitting ? "Completing…" : "Complete Setup"}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

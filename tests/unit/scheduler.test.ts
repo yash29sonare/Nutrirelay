@@ -6,19 +6,25 @@ vi.mock("@supabase/supabase-js", () => {
   function makeQuery(tableData: unknown) {
     const data = Array.isArray(tableData) ? tableData : []
     const result = { data, error: null }
+    const ordered = {
+      limit: vi.fn().mockResolvedValue(result),
+      maybeSingle: vi.fn().mockResolvedValue({ data: data[0] ?? null, error: null }),
+      single: vi.fn().mockResolvedValue({ data: data[0] ?? null, error: null }),
+    }
+    const inResult = {
+      order: vi.fn(() => ordered),
+      limit: vi.fn().mockResolvedValue(result),
+      then: (resolve: (value: typeof result) => unknown) => Promise.resolve(resolve(result)),
+    }
     return {
       select: vi.fn(() => ({
         eq: vi.fn().mockResolvedValue(result),
         neq: vi.fn().mockResolvedValue(result),
-        in: vi.fn(() => ({
-          order: vi.fn(() => ({
-            limit: vi.fn().mockResolvedValue(result),
-          })),
-        })),
-        order: vi.fn(() => ({
-          limit: vi.fn().mockResolvedValue(result),
-        })),
+        in: vi.fn(() => inResult),
+        order: vi.fn(() => ordered),
         limit: vi.fn().mockResolvedValue(result),
+        maybeSingle: vi.fn().mockResolvedValue({ data: data[0] ?? null, error: null }),
+        single: vi.fn().mockResolvedValue({ data: data[0] ?? null, error: null }),
       })),
     }
   }
@@ -67,6 +73,7 @@ vi.mock("@/lib/format", () => ({
 }))
 
 import { runScheduler } from "@/lib/automation/scheduler"
+import { planReminders } from "@/lib/reminders/reminderPlanner"
 
 describe("scheduler", () => {
   beforeEach(() => {
@@ -96,5 +103,41 @@ describe("scheduler", () => {
     const result = await runScheduler()
     expect(result.totalTrainers).toBe(1)
     expect(result.processedTrainers).toBe(1)
+  })
+
+  it("passes skipped breakfast routine metadata into reminder planning", async () => {
+    mockDbData.data.trainer_clients = [{ client_id: "c1", trainer_id: "t1" }]
+    mockDbData.data.client_workout_schedules = [{
+      client_id: "c1",
+      breakfast_time: null,
+      lunch_time: "14:00:00",
+      snack_time: "17:00:00",
+      dinner_time: "22:00:00",
+    }]
+    mockDbData.data.client_onboarding_states = [{
+      client_id: "c1",
+      collected_data: {
+        routine_times: {
+          skippedMeals: ["breakfast"],
+        },
+      },
+    }]
+
+    await runScheduler()
+
+    expect(planReminders).toHaveBeenCalledWith(
+      "t1",
+      expect.arrayContaining([
+        expect.objectContaining({
+          clientId: "c1",
+          routine: expect.objectContaining({
+            breakfastTime: null,
+            lunchTime: "14:00:00",
+            skippedMeals: ["breakfast"],
+          }),
+        }),
+      ]),
+      expect.any(Function),
+    )
   })
 })

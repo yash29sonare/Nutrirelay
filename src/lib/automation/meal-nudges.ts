@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendTemplateMessage } from "@/lib/whatsapp/send";
+import { getClientAutomationState } from "@/lib/whatsapp/automation-state";
 
 // Grace period after a meal slot window closes before flagging as missed
 const GRACE_MINUTES = 30;
@@ -50,6 +51,59 @@ function parseScheduledTime(timeStr: string): number | null {
   return h * 60 + m;
 }
 
+function normalizeMinutes(minutes: number): number {
+  return ((minutes % 1440) + 1440) % 1440;
+}
+
+function hasSkippedBreakfast(collectedData: Record<string, unknown> | null | undefined): boolean {
+  const routineTimes = collectedData?.routine_times
+  const skippedMeals = Array.isArray((routineTimes as Record<string, unknown> | undefined)?.skippedMeals)
+    ? ((routineTimes as Record<string, unknown>).skippedMeals as unknown[]).filter((meal): meal is string => typeof meal === "string")
+    : []
+
+  return skippedMeals.some((meal) => meal.toLowerCase() === "breakfast")
+}
+
+export function adjustMealSlotForWorkout(input: {
+  slotName: string;
+  scheduledMinutes: number;
+  workoutMinutes: number | null;
+  postWorkoutDelayMinutes?: number;
+}): number {
+  if (input.workoutMinutes === null) return input.scheduledMinutes;
+
+  const slotName = input.slotName.toLowerCase();
+  const workout = input.workoutMinutes;
+  const postWorkoutDelay = input.postWorkoutDelayMinutes ?? 45;
+  const workoutEnd = normalizeMinutes(workout + 60);
+  const scheduled = input.scheduledMinutes;
+
+  if (slotName.includes("post") && slotName.includes("workout")) {
+    return normalizeMinutes(workoutEnd + postWorkoutDelay);
+  }
+
+  if (slotName.includes("pre") && slotName.includes("workout")) {
+    return normalizeMinutes(workout - 45);
+  }
+
+  const isDinner = slotName.includes("dinner");
+  const isBreakfast = slotName.includes("breakfast");
+  const overlapsWorkout = Math.abs(scheduled - workout) <= 45 || Math.abs(scheduled - workoutEnd) <= 30;
+
+  if ((isDinner || isBreakfast) && overlapsWorkout) {
+    return normalizeMinutes(workoutEnd + postWorkoutDelay);
+  }
+
+  return scheduled;
+}
+
+export function shouldSuppressMealSlot(input: {
+  slotName: string;
+  onboardingCollectedData?: Record<string, unknown> | null;
+}): boolean {
+  return input.slotName.toLowerCase().includes("breakfast") && hasSkippedBreakfast(input.onboardingCollectedData)
+}
+
 // ── Meal nudge evaluator ───────────────────────────────────────────────────────
 
 export async function evaluateMealNudges(): Promise<void> {
@@ -87,6 +141,24 @@ export async function evaluateMealNudges(): Promise<void> {
     const clientId = String(plan.client_id);
     const timezone = DEFAULT_TZ;
 
+    const { data: onboardingState } = await db
+      .from("client_onboarding_states")
+      .select("collected_data")
+      .eq("client_id", clientId)
+      .limit(1)
+      .maybeSingle();
+
+    const onboardingCollectedData = onboardingState?.collected_data && typeof onboardingState.collected_data === "object"
+      ? onboardingState.collected_data as Record<string, unknown>
+      : null;
+
+    if (shouldSuppressMealSlot({
+      slotName: String(slot.name),
+      onboardingCollectedData,
+    })) {
+      continue;
+    }
+
     // Resolve tenant owner (trainer_id) for template sending
     const { data: tcRow, error: tcError } = await db
       .from("trainer_clients")
@@ -100,12 +172,33 @@ export async function evaluateMealNudges(): Promise<void> {
 
     const trainerId = String(tcRow.trainer_id);
 
+    const automationState = await getClientAutomationState(clientId);
+    if (automationState === "paused_no_response") continue;
+
     if (!slot.scheduled_time) continue;
 
     const slotMinutes = parseScheduledTime(slot.scheduled_time);
     if (slotMinutes === null) continue;
 
-    const windowClose = slotMinutes + (slot.window_minutes ?? 30) + GRACE_MINUTES;
+    const { data: workoutRow } = await db
+      .from("client_workout_schedules")
+      .select("workout_time")
+      .eq("client_id", clientId)
+      .limit(1)
+      .maybeSingle();
+
+    const workoutMinutes =
+      typeof workoutRow?.workout_time === "string"
+        ? parseScheduledTime(workoutRow.workout_time)
+        : null;
+
+    const adjustedSlotMinutes = adjustMealSlotForWorkout({
+      slotName: String(slot.name),
+      scheduledMinutes: slotMinutes,
+      workoutMinutes,
+    });
+
+    const windowClose = adjustedSlotMinutes + (slot.window_minutes ?? 30) + GRACE_MINUTES;
     const nowLocal = getLocalMinutesSinceMidnight(timezone);
 
     // Only evaluate if we are past the slot's window + grace period

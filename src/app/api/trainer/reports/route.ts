@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getClientReports } from "@/lib/dashboard-reads"
+import { getClientReports, getTrainerWeeklyReportHistory } from "@/lib/dashboard-reads"
 import { createServiceDb } from "@/lib/ownership"
 import { requireTrainer, unauthorized } from "@/lib/api-auth"
 
@@ -24,16 +24,10 @@ export async function GET(req: NextRequest) {
     const db = createServiceDb()
 
     if (type === "weekly" || type === "all") {
-      const clientIds = await getActiveClientIds(trainerId)
-      const { data: weekly } = await db
-        .from("weekly_reports")
-        .select("id, client_id, report_date, summary, pdf_storage_url")
-        .in("client_id", clientIds)
-        .order("report_date", { ascending: false })
-        .limit(50)
+      const weekly = await getTrainerWeeklyReportHistory(trainerId)
 
       if (type === "weekly") {
-        return NextResponse.json({ ok: true, reports: weekly ?? [] })
+        return NextResponse.json({ ok: true, reports: weekly.reports, blocked_client_ids: weekly.blocked_client_ids })
       }
     }
 

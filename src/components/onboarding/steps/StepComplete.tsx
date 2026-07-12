@@ -50,9 +50,9 @@ export function StepComplete({ data }: StepCompleteProps) {
           <div className="flex items-center gap-3">
             <CheckCircle size={15} className="text-brand-500 shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs text-[var(--muted)]">Coaching Style</p>
+              <p className="text-xs text-[var(--muted)]">Country</p>
               <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                {data.coachingStyle || "Not specified"}
+                {data.country || "Not specified"}
               </p>
             </div>
           </div>

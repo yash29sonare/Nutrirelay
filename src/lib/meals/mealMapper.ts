@@ -1,4 +1,13 @@
-import type { MealRecord, MealStatus, MealType, MealReview, MealAttachment } from "@/types/meal"
+import type {
+  MealAttachment,
+  MealRecord,
+  MealReview,
+  MealReviewReason,
+  MealReviewState,
+  MealStatus,
+  MealType,
+  NutritionConfidence,
+} from "@/types/meal"
 
 export interface FoodLogRow {
   id: string
@@ -17,6 +26,13 @@ export interface FoodLogRow {
   meal_slot_id?: string | null
   wam_id?: string
   transcription_failed?: boolean
+  review_state?: string | null
+  ai_confidence?: string | null
+  review_reason?: string | null
+  trainer_note?: string | null
+  reviewed_at?: string | null
+  reviewed_by?: string | null
+  merged_into_id?: string | null
 }
 
 function mapStatus(dbStatus: string): MealStatus {
@@ -25,6 +41,39 @@ function mapStatus(dbStatus: string): MealStatus {
     case "UNVERIFIED": return "unverified"
     case "PENDING":    return "pending"
     default:           return "recorded"
+  }
+}
+
+function mapReviewState(value?: string | null): MealReviewState {
+  switch (value) {
+    case "needs_review":
+    case "reviewed":
+    case "corrected":
+    case "rejected":
+    case "merged":
+      return value
+    default:
+      return "auto_logged"
+  }
+}
+
+function mapConfidence(value?: string | null): NutritionConfidence {
+  return value === "medium" || value === "low" ? value : "high"
+}
+
+function mapReviewReason(value?: string | null): MealReviewReason | undefined {
+  switch (value) {
+    case "unclear_quantity":
+    case "unknown_food":
+    case "image_only":
+    case "conflicting_input":
+    case "duplicate_possible":
+    case "low_confidence_ai":
+    case "client_correction":
+    case "trainer_requested":
+      return value
+    default:
+      return undefined
   }
 }
 
@@ -41,6 +90,15 @@ export function mapFoodLogToMealRecord(row: FoodLogRow): MealRecord {
   const attachment: MealAttachment | undefined = row.image_path
     ? { path: row.image_path, type: "image" }
     : undefined
+  const sourceText = row.notes?.split("| intent:")[0]?.trim() || row.notes?.trim()
+  const sourceType =
+    row.image_path
+      ? "image"
+      : row.transcription_failed !== undefined
+        ? "voice"
+        : row.wam_id?.startsWith("wamid")
+          ? "text"
+          : "unknown"
 
   const review: MealReview = {
     status,
@@ -61,8 +119,17 @@ export function mapFoodLogToMealRecord(row: FoodLogRow): MealRecord {
     carbsG: row.carbs_g ?? 0,
     fatG: row.fat_g ?? 0,
     review,
+    reviewState: mapReviewState(row.review_state),
+    aiConfidence: mapConfidence(row.ai_confidence),
+    reviewReason: mapReviewReason(row.review_reason),
+    trainerNote: row.trainer_note ?? undefined,
+    reviewedAt: row.reviewed_at ?? undefined,
+    reviewedBy: row.reviewed_by ?? undefined,
+    mergedIntoId: row.merged_into_id ?? undefined,
     attachment,
-    notes: row.notes && status === "recorded" ? row.notes : undefined,
+    notes: row.notes ?? undefined,
+    sourceText,
+    sourceType,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

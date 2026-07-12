@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { writeAuditLog } from "./audit"
 import { checkClientLimit } from "@/lib/entitlements"
+import { startClientOnboarding } from "@/lib/whatsapp/onboardingService"
 
 type LifecycleStatus = "INVITED" | "ACTIVE" | "PAUSED" | "INACTIVE" | "ARCHIVED"
 
@@ -90,6 +91,19 @@ export async function inviteClient(trainerId: string, clientId: string): Promise
     entity_type: "client_lifecycle",
     entity_id: clientId,
     metadata: { previous_status: (existing as { status: string } | null)?.status ?? null, new_status: "INVITED" },
+  })
+
+  const { data: profile } = await db
+    .from("profiles")
+    .select("phone_number")
+    .eq("id", clientId)
+    .limit(1)
+    .maybeSingle()
+
+  await startClientOnboarding({
+    clientId,
+    trainerId,
+    clientPhone: (profile as { phone_number: string | null } | null)?.phone_number ?? null,
   })
 
   return { client_id: clientId, trainer_id: trainerId, status: "INVITED" }

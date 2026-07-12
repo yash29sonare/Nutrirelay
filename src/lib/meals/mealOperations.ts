@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
-import type { MealRecord, MealStatus } from "@/types/meal"
+import type { MealRecord, MealReviewReason, MealReviewState, MealStatus, NutritionConfidence } from "@/types/meal"
 import { mapFoodLogToMealRecord, type FoodLogRow } from "./mealMapper"
 import { appendEvents } from "@/lib/events/engagementEventStore"
+import { countsTowardMacros } from "./reviewRules"
 
 function getDb() {
   return createClient(
@@ -154,6 +155,104 @@ export async function getClientMeals(
     .eq("client_id", clientId)
     .order("logged_at", { ascending: false })
     .range(offset, offset + limit - 1)
+
+  return ((data ?? []) as FoodLogRow[]).map(mapFoodLogToMealRecord)
+}
+
+export async function getClientMealsForDay(clientId: string, date = new Date()): Promise<MealRecord[]> {
+  const db = getDb()
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
+
+  const { data } = await db
+    .from("food_logs")
+    .select("*")
+    .eq("client_id", clientId)
+    .gte("logged_at", start.toISOString())
+    .lt("logged_at", end.toISOString())
+    .order("logged_at", { ascending: false })
+
+  return ((data ?? []) as FoodLogRow[]).map(mapFoodLogToMealRecord).filter((meal) => countsTowardMacros(meal.reviewState))
+}
+
+export interface MealReviewPatch {
+  reviewState?: MealReviewState
+  aiConfidence?: NutritionConfidence
+  reviewReason?: MealReviewReason | null
+  trainerNote?: string | null
+  foodText?: string | null
+  calories?: number | null
+  proteinG?: number | null
+  carbsG?: number | null
+  fatG?: number | null
+  mergedIntoId?: string | null
+}
+
+export async function updateMealReviewWorkflow(
+  mealId: string,
+  trainerId: string,
+  patch: MealReviewPatch,
+): Promise<MealRecord> {
+  const db = getDb()
+  const now = new Date().toISOString()
+  const updates: Record<string, unknown> = { updated_at: now }
+
+  if (patch.reviewState !== undefined) {
+    updates.review_state = patch.reviewState
+    if (patch.reviewState === "reviewed" || patch.reviewState === "corrected" || patch.reviewState === "rejected" || patch.reviewState === "merged") {
+      updates.reviewed_at = now
+      updates.reviewed_by = trainerId
+    }
+  }
+  if (patch.aiConfidence !== undefined) updates.ai_confidence = patch.aiConfidence
+  if (patch.reviewReason !== undefined) updates.review_reason = patch.reviewReason
+  if (patch.trainerNote !== undefined) updates.trainer_note = patch.trainerNote
+  if (patch.foodText !== undefined) updates.notes = patch.foodText
+  if (patch.calories !== undefined) updates.calories = patch.calories
+  if (patch.proteinG !== undefined) updates.protein_g = patch.proteinG
+  if (patch.carbsG !== undefined) updates.carbs_g = patch.carbsG
+  if (patch.fatG !== undefined) updates.fat_g = patch.fatG
+  if (patch.mergedIntoId !== undefined) updates.merged_into_id = patch.mergedIntoId
+
+  const { data, error } = await db
+    .from("food_logs")
+    .update(updates)
+    .eq("id", mealId)
+    .eq("trainer_id", trainerId)
+    .select("*")
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to update nutrition review: ${error.message}`)
+  if (!data) throw new Error("Meal record not found or access denied")
+
+  const record = mapFoodLogToMealRecord(data as FoodLogRow)
+  await appendEvents(record.trainerId, [
+    {
+      client_id: record.clientId,
+      action_id: null,
+      event_type: "MEAL_REVIEWED",
+      event_id: makeEventId(),
+      payload: {
+        mealId: record.id,
+        reviewState: record.reviewState,
+        aiConfidence: record.aiConfidence,
+        reviewReason: record.reviewReason ?? null,
+      },
+    },
+  ])
+
+  return record
+}
+
+export async function getNutritionReviewQueue(trainerId: string, limit = 50): Promise<MealRecord[]> {
+  const db = getDb()
+  const { data } = await db
+    .from("food_logs")
+    .select("*")
+    .eq("trainer_id", trainerId)
+    .eq("review_state", "needs_review")
+    .order("logged_at", { ascending: false })
+    .limit(limit)
 
   return ((data ?? []) as FoodLogRow[]).map(mapFoodLogToMealRecord)
 }

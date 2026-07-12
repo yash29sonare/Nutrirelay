@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { classifyImageMessage } from "@/lib/whatsapp/media-classification"
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -25,11 +26,42 @@ export interface ClientDetail {
   client_id: string
   full_name: string | null
   phone_number: string | null
+  onboarding: {
+    status: string
+    current_step: string
+    missing_fields: string[]
+    last_question_sent_at: string | null
+    last_answer_received_at: string | null
+    skipped_meals: string[]
+  } | null
   goal: Record<string, any> | null
   health: Record<string, any> | null
   preferences: Record<string, any> | null
   workout: Record<string, any> | null
   compliance: Record<string, any> | null
+  media: Array<{
+    id: string
+    wam_id: string | null
+    message_timestamp: string
+    media_url: string | null
+    media_kind: string | null
+    caption: string | null
+  }>
+  latestStructuredResponse: {
+    wam_id: string | null
+    message_timestamp: string
+    reply_id: string | null
+    reply_label: string | null
+    selected_option: string | null
+    interactive_type: string | null
+    context_wam_id: string | null
+    adherence_status: string | null
+    outcome: string | null
+    needs_review: boolean
+    follow_up_message: string | null
+    prompt: string | null
+    automation_state: string | null
+  } | null
 }
 
 export interface DailyNutrition {
@@ -55,6 +87,87 @@ export interface ClientReport {
   report_date: string
   summary: string
   pdf_url: string | null
+}
+
+interface TrainerClientOwnershipLink {
+  trainer_id: string
+  client_id: string
+  is_active: boolean
+}
+
+interface WeeklyReportRow {
+  id: string
+  client_id: string
+  report_date: string
+  summary: string
+  pdf_storage_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WeeklyReportHistoryItem {
+  id: string
+  client_id: string
+  client_name: string
+  report_date: string
+  summary: string
+  created_at: string
+  updated_at: string
+  has_document: boolean
+}
+
+export interface WeeklyReportHistoryResult {
+  reports: WeeklyReportHistoryItem[]
+  blocked_client_ids: string[]
+}
+
+export function getSafeWeeklyReportClientIds(
+  trainerId: string,
+  links: TrainerClientOwnershipLink[],
+): {
+  safeClientIds: string[]
+  blockedClientIds: string[]
+} {
+  const activeLinks = links.filter((link) => link.is_active)
+  const ownedClientIds = new Set(
+    activeLinks
+      .filter((link) => link.trainer_id === trainerId)
+      .map((link) => link.client_id),
+  )
+  const trainerIdsByClient = new Map<string, Set<string>>()
+
+  for (const link of activeLinks) {
+    const trainerIds = trainerIdsByClient.get(link.client_id) ?? new Set<string>()
+    trainerIds.add(link.trainer_id)
+    trainerIdsByClient.set(link.client_id, trainerIds)
+  }
+
+  const blockedClientIds = [...ownedClientIds].filter((clientId) => (trainerIdsByClient.get(clientId)?.size ?? 0) > 1)
+  const blockedSet = new Set(blockedClientIds)
+  const safeClientIds = [...ownedClientIds].filter((clientId) => !blockedSet.has(clientId))
+
+  return { safeClientIds, blockedClientIds }
+}
+
+export function buildWeeklyReportHistory(input: {
+  reports: WeeklyReportRow[]
+  clientNamesById: Map<string, string>
+}): WeeklyReportHistoryItem[] {
+  return input.reports
+    .map((report) => ({
+      id: report.id,
+      client_id: report.client_id,
+      client_name: input.clientNamesById.get(report.client_id) ?? "Client",
+      report_date: report.report_date,
+      summary: report.summary,
+      created_at: report.created_at,
+      updated_at: report.updated_at,
+      has_document: Boolean(report.pdf_storage_url),
+    }))
+    .sort((a, b) => {
+      const dateCompare = b.report_date.localeCompare(a.report_date)
+      return dateCompare !== 0 ? dateCompare : b.created_at.localeCompare(a.created_at)
+    })
 }
 
 export async function getTrainerClientSummaries(trainerId: string): Promise<ClientSummaryCard[]> {
@@ -138,26 +251,117 @@ export async function getClientDetail(clientId: string, trainerId: string): Prom
 
   if (!tc) return null
 
-  const [profileRes, goalRes, healthRes, prefRes, workoutRes, complianceRes] = await Promise.all([
+  const [profileRes, onboardingRes, goalRes, healthRes, prefRes, workoutRes, complianceRes, mediaRes, structuredResponseRes] = await Promise.all([
     db.from("profiles").select("full_name, phone_number").eq("id", clientId).single(),
+    db.from("client_onboarding_states").select("*").eq("client_id", clientId).limit(1).maybeSingle(),
     db.from("client_goals").select("*").eq("client_id", clientId).eq("goal_status", "ACTIVE").limit(1).maybeSingle(),
     db.from("client_health_profiles").select("*").eq("client_id", clientId).limit(1).maybeSingle(),
     db.from("client_preferences").select("*").eq("client_id", clientId).limit(1).maybeSingle(),
     db.from("client_workout_schedules").select("*").eq("client_id", clientId).limit(1).maybeSingle(),
     db.from("client_compliance_snapshots").select("*").eq("client_id", clientId).order("calculated_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("communication_logs")
+      .select("id, wam_id, message_timestamp, metadata")
+      .eq("trainer_id", trainerId)
+      .eq("client_id", clientId)
+      .eq("direction", "INBOUND")
+      .eq("message_type", "IMAGE")
+      .order("message_timestamp", { ascending: false })
+      .limit(12),
+    db.from("communication_logs")
+      .select("wam_id, message_timestamp, metadata")
+      .eq("trainer_id", trainerId)
+      .eq("client_id", clientId)
+      .eq("direction", "INBOUND")
+      .eq("message_type", "POLL")
+      .order("message_timestamp", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const profile = profileRes.data as { full_name: string | null; phone_number: string | null } | null
+  const onboarding = onboardingRes.data as Record<string, any> | null
+  const goal = goalRes.data as Record<string, any> | null
+  const health = healthRes.data as Record<string, any> | null
+  const preferences = prefRes.data as Record<string, any> | null
+  const workout = workoutRes.data as Record<string, any> | null
+  const onboardingCollectedData = onboarding?.collected_data && typeof onboarding.collected_data === "object"
+    ? onboarding.collected_data as Record<string, any>
+    : null
+  const skippedMeals = Array.isArray(onboardingCollectedData?.routine_times?.skippedMeals)
+    ? onboardingCollectedData.routine_times.skippedMeals.filter((meal: unknown): meal is string => typeof meal === "string")
+    : []
+  const missingFields = [
+    !health?.height_cm ? "height" : null,
+    !health?.weight_kg ? "weight" : null,
+    !goal?.goal_type ? "goal" : null,
+    health?.allergies === undefined ? "allergies" : null,
+    !health?.diet_type ? "food_preferences" : null,
+    !workout?.breakfast_time && !workout?.lunch_time && !workout?.snack_time && !workout?.dinner_time ? "routine_times" : null,
+    !workout?.workout_time ? "workout_schedule" : null,
+    !workout?.preferred_checkin_time && !workout?.checkin_preference ? "checkin_preference" : null,
+  ].filter((value): value is string => Boolean(value))
 
   return {
     client_id: clientId,
     full_name: profile?.full_name ?? null,
     phone_number: profile?.phone_number ?? null,
-    goal: (goalRes.data as Record<string, any> | null),
-    health: (healthRes.data as Record<string, any> | null),
-    preferences: (prefRes.data as Record<string, any> | null),
-    workout: (workoutRes.data as Record<string, any> | null),
+    onboarding: onboarding ? {
+      status: typeof onboarding.onboarding_status === "string" ? onboarding.onboarding_status : "not_started",
+      current_step: typeof onboarding.current_step === "string" ? onboarding.current_step : "height",
+      missing_fields: missingFields,
+      last_question_sent_at: typeof onboarding.last_question_sent_at === "string" ? onboarding.last_question_sent_at : null,
+      last_answer_received_at: typeof onboarding.last_answer_received_at === "string" ? onboarding.last_answer_received_at : null,
+      skipped_meals: skippedMeals,
+    } : null,
+    goal,
+    health,
+    preferences,
+    workout,
     compliance: (complianceRes.data as Record<string, any> | null),
+    media: ((mediaRes.data ?? []) as Array<{
+      id: string
+      wam_id: string | null
+      message_timestamp: string
+      metadata: Record<string, any> | null
+    }>).map((row) => {
+      const caption = typeof row.metadata?.original_text === "string" ? row.metadata.original_text : null
+      const storedKind = typeof row.metadata?.media_kind === "string" ? row.metadata.media_kind : null
+
+      return {
+        id: row.id,
+        wam_id: row.wam_id,
+        message_timestamp: row.message_timestamp,
+        media_url: typeof row.metadata?.media_url === "string" ? row.metadata.media_url : null,
+        media_kind: storedKind && storedKind !== "unknown" ? storedKind : classifyImageMessage({ caption }),
+        caption,
+      }
+    }),
+    latestStructuredResponse: (() => {
+      const row = structuredResponseRes.data as {
+        wam_id: string | null
+        message_timestamp: string
+        metadata: Record<string, any> | null
+      } | null
+
+      if (!row) return null
+
+      const structured = row.metadata?.structured_response as Record<string, unknown> | undefined
+      return {
+        wam_id: row.wam_id,
+        message_timestamp: row.message_timestamp,
+        reply_id: typeof structured?.reply_id === "string" ? structured.reply_id : null,
+        reply_label: typeof structured?.reply_label === "string" ? structured.reply_label : null,
+        selected_option: typeof structured?.selected_option === "string" ? structured.selected_option : null,
+        interactive_type: typeof structured?.interactive_type === "string" ? structured.interactive_type : null,
+        context_wam_id: typeof structured?.context_wam_id === "string" ? structured.context_wam_id : null,
+        adherence_status: typeof structured?.adherence_status === "string" ? structured.adherence_status : null,
+        outcome: typeof structured?.outcome === "string" ? structured.outcome : null,
+        needs_review: structured?.needs_review === true,
+        follow_up_message: typeof structured?.follow_up_message === "string" ? structured.follow_up_message : null,
+        prompt: typeof row.metadata?.outbound_prompt?.prompt === "string" ? row.metadata.outbound_prompt.prompt : null,
+        automation_state: typeof row.metadata?.automation_state === "string" ? row.metadata.automation_state : null,
+      }
+    })(),
   }
 }
 
@@ -318,7 +522,7 @@ export async function getClientReports(clientId: string, trainerId: string): Pro
     reports.push({
       report_date: r.report_date,
       summary: r.summary,
-      pdf_url: r.pdf_storage_url,
+      pdf_url: null,
     })
   }
 
@@ -332,4 +536,46 @@ export async function getClientReports(clientId: string, trainerId: string): Pro
 
   reports.sort((a, b) => b.report_date.localeCompare(a.report_date))
   return reports
+}
+
+export async function getTrainerWeeklyReportHistory(trainerId: string): Promise<WeeklyReportHistoryResult> {
+  const db = getDb()
+  const { data: links } = await db
+    .from("trainer_clients")
+    .select("trainer_id, client_id, is_active")
+    .eq("is_active", true)
+
+  const ownershipLinks = (links ?? []) as TrainerClientOwnershipLink[]
+  const { safeClientIds, blockedClientIds } = getSafeWeeklyReportClientIds(trainerId, ownershipLinks)
+
+  if (safeClientIds.length === 0) {
+    return { reports: [], blocked_client_ids: blockedClientIds }
+  }
+
+  const { data: profiles } = await db
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", safeClientIds)
+
+  const clientNamesById = new Map(
+    ((profiles ?? []) as Array<{ id: string; full_name: string | null }>).map((profile) => [
+      profile.id,
+      profile.full_name ?? "Client",
+    ]),
+  )
+
+  const { data: weeklyReports } = await db
+    .from("weekly_reports")
+    .select("id, client_id, report_date, summary, pdf_storage_url, created_at, updated_at")
+    .in("client_id", safeClientIds)
+    .order("report_date", { ascending: false })
+    .limit(50)
+
+  return {
+    reports: buildWeeklyReportHistory({
+      reports: (weeklyReports ?? []) as WeeklyReportRow[],
+      clientNamesById,
+    }),
+    blocked_client_ids: blockedClientIds,
+  }
 }

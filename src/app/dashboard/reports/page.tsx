@@ -8,6 +8,7 @@ import { DashboardGrid } from "@/components/layout/DashboardGrid"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { ErrorState } from "@/components/ui/ErrorState"
 import { InlineNotice } from "@/components/ui/InlineNotice"
+import { getTrainerWeeklyReportHistory } from "@/lib/dashboard-reads"
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getEvents } from "@/lib/events/engagementEventStore"
 import { createClient } from "@/utils/supabase/server"
@@ -90,6 +91,7 @@ export default async function ReportsPage() {
   const dto = result.data
   const events = await getEvents(authUserId)
   const analytics = buildAnalyticsDTO(dto, events)
+  const weeklyReportHistory = await getTrainerWeeklyReportHistory(authUserId)
 
   const reportDate = formatDate(new Date().toISOString())
 
@@ -742,7 +744,81 @@ export default async function ReportsPage() {
       </DashboardSection>
 
       {/* ════════════════════════════════════════════════════════
-          SECTION 7: Export Center (UI Only)
+          SECTION 7: Weekly Reports
+          ════════════════════════════════════════════════════════ */}
+      <DashboardSection
+        title="Weekly Reports"
+        description="Safe trainer-scoped weekly report history for owned clients only"
+      >
+        {weeklyReportHistory.reports.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {weeklyReportHistory.reports.map((report) => (
+              <Card key={report.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                        {report.client_name}
+                      </h3>
+                      <p className="text-xs text-[var(--muted)]">
+                        Week of {formatDate(report.report_date)}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0">
+                      Weekly summary
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Generated</p>
+                      <p className="font-medium text-[var(--foreground)]">
+                        {formatDate(report.created_at)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Document</p>
+                      <p className="font-medium text-[var(--foreground)]">
+                        {report.has_document ? "Stored privately" : "No document stored"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)] mb-1">Summary</p>
+                    <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap">
+                      {report.summary || "Summary unavailable for this report."}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="py-8">
+              <EmptyState
+                icon={<Calendar size={16} />}
+                title="No weekly reports yet"
+                description="Reports will appear here after weekly generation runs."
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {weeklyReportHistory.blocked_client_ids.length > 0 ? (
+          <InlineNotice variant="warning" className="mt-3">
+            Some client reports are hidden because active trainer ownership is ambiguous and cannot be proven safely yet.
+          </InlineNotice>
+        ) : null}
+
+        <InlineNotice variant="info" className="mt-3">
+          Weekly report history is view-only in this phase. PDF export, WhatsApp delivery visibility, and schema hardening remain future work.
+        </InlineNotice>
+      </DashboardSection>
+
+      {/* ════════════════════════════════════════════════════════
+          SECTION 8: Export Center (UI Only)
           ════════════════════════════════════════════════════════ */}
       <DashboardSection
         title="Export Center"
@@ -808,7 +884,7 @@ export default async function ReportsPage() {
       </DashboardSection>
 
       {/* ════════════════════════════════════════════════════════
-          SECTION 8: Quick Navigation
+          SECTION 9: Quick Navigation
           ════════════════════════════════════════════════════════ */}
       <DashboardSection title="Quick Navigation">
         <Card>

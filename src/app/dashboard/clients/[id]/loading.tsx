@@ -4,7 +4,7 @@ import { PulseLine } from "@/components/ui/LoadingState";
 
 export default function ClientDetailLoading() {
   return (
-    <PageContainer className="max-w-6xl">
+    <PageContainer>
       {/* Back nav skeleton */}
       <PulseLine className="h-4 w-32" />
 

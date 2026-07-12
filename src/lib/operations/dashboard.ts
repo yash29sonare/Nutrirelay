@@ -11,6 +11,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { isClientAtRisk } from "@/lib/domain/dashboardSemantics"
+import type { Database } from "@/shared/types/supabase"
 import type {
   ClientSummary,
   ClientActivity,
@@ -20,12 +21,32 @@ import type {
 } from "@/types/dashboard"
 
 function getDb() {
-  return createClient(
+  return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false, autoRefreshToken: false } },
   )
 }
+
+type TrainerRow = Pick<
+  Database["public"]["Tables"]["trainers"]["Row"],
+  "trainer_id" | "auth_user_id" | "onboarding_status" | "business_name" | "timezone" | "country"
+>
+
+type ProfileRow = Pick<
+  Database["public"]["Tables"]["profiles"]["Row"],
+  "id" | "full_name"
+>
+
+type FoodLogRow = Pick<
+  Database["public"]["Tables"]["food_logs"]["Row"],
+  "client_id" | "logged_at" | "calories" | "protein_g" | "carbs_g" | "fat_g"
+>
+
+type StrikeRow = Pick<
+  Database["public"]["Tables"]["strike_log"]["Row"],
+  "profile_id"
+>
 
 // ── Safety helpers ─────────────────────────────────────────────────
 
@@ -48,6 +69,23 @@ function makeError(code: DashboardErrorCode, message: string): DashboardResult {
       timestamp: new Date().toISOString(),
     },
   }
+}
+
+function startOfUtcDay(daysOffset = 0): Date {
+  const now = new Date()
+  return new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + daysOffset,
+    0,
+    0,
+    0,
+    0,
+  ))
+}
+
+function toUtcDateKey(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10)
 }
 
 // ── Raw RPC response shape (private, not exported) ────────────────
@@ -165,6 +203,267 @@ function mapDashboardData(raw: unknown): DashboardDataDTO {
   }
 }
 
+async function readDashboardDataDirect(authUserId: string): Promise<DashboardResult> {
+  const db = getDb()
+
+  const trainerQuery = await db
+    .from("trainers")
+    .select("trainer_id, auth_user_id, onboarding_status, business_name, timezone, country")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle()
+
+  const trainer = trainerQuery.data as TrainerRow | null
+  const trainerError = trainerQuery.error
+
+  if (trainerError) {
+    return makeError(
+      "PERMANENT_DB_ERROR",
+      `Dashboard fallback trainer query error: ${trainerError.message}`,
+    )
+  }
+
+  if (!trainer) {
+    return makeError(
+      "TRAINER_NOT_FOUND",
+      "No trainer row exists for this user. The onboarding trigger may not have fired.",
+    )
+  }
+
+  const { data: trainerClients, error: trainerClientsError } = await db
+    .from("trainer_clients")
+    .select("client_id")
+    .eq("trainer_id", authUserId)
+    .eq("is_active", true)
+
+  if (trainerClientsError) {
+    return makeError(
+      "PERMANENT_DB_ERROR",
+      `Dashboard fallback trainer_clients query error: ${trainerClientsError.message}`,
+    )
+  }
+
+  const clientIds = (trainerClients ?? []).map((row) => row.client_id)
+  const activeClients = clientIds.length
+  const todayKey = startOfUtcDay().toISOString().slice(0, 10)
+  const lastWeekKey = startOfUtcDay(-7).toISOString().slice(0, 10)
+  const complianceWindowStart = startOfUtcDay(-6).toISOString()
+  const activityWindowStart = startOfUtcDay(-7).toISOString()
+
+  if (clientIds.length === 0) {
+    return {
+      success: true,
+      data: {
+        version: "v1",
+        trainer: {
+          id: trainer.trainer_id,
+          auth_user_id: trainer.auth_user_id,
+          onboarding_status: trainer.onboarding_status,
+          business_name: trainer.business_name,
+          timezone: trainer.timezone,
+          country: trainer.country,
+        },
+        clients: [],
+        metrics: {
+          activeClients: 0,
+          complianceRate: 0,
+          weeklyProgress: 0,
+          atRiskClients: 0,
+        },
+        trends: {
+          complianceOverTime: Array.from({ length: 7 }, (_, index) => ({
+            date: startOfUtcDay(index - 6).toISOString().slice(0, 10),
+            compliance_rate: 0,
+          })),
+          clientActivity: [],
+        },
+      },
+    }
+  }
+
+  const [profilesRes, logsRes, strikesRes] = await Promise.all([
+    db
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", clientIds),
+    db
+      .from("food_logs")
+      .select("client_id, logged_at, calories, protein_g, carbs_g, fat_g")
+      .eq("trainer_id", authUserId)
+      .in("client_id", clientIds)
+      .gte("logged_at", activityWindowStart),
+    db
+      .from("strike_log")
+      .select("profile_id")
+      .in("profile_id", clientIds),
+  ])
+
+  if (profilesRes.error) {
+    return makeError(
+      "PERMANENT_DB_ERROR",
+      `Dashboard fallback profiles query error: ${profilesRes.error.message}`,
+    )
+  }
+
+  if (logsRes.error) {
+    return makeError(
+      "PERMANENT_DB_ERROR",
+      `Dashboard fallback food_logs query error: ${logsRes.error.message}`,
+    )
+  }
+
+  if (strikesRes.error) {
+    return makeError(
+      "PERMANENT_DB_ERROR",
+      `Dashboard fallback strike_log query error: ${strikesRes.error.message}`,
+    )
+  }
+
+  const profiles = (profilesRes.data ?? []) as ProfileRow[]
+  const logs = (logsRes.data ?? []) as FoodLogRow[]
+  const strikes = (strikesRes.data ?? []) as StrikeRow[]
+
+  const profileMap = new Map(profiles.map((row) => [row.id, row.full_name ?? ""]))
+  const strikeCountMap = new Map<string, number>()
+  for (const row of strikes) {
+    strikeCountMap.set(row.profile_id, (strikeCountMap.get(row.profile_id) ?? 0) + 1)
+  }
+
+  const complianceSets = new Map<string, Set<string>>()
+  for (let index = 0; index < 7; index += 1) {
+    const dateKey = startOfUtcDay(index - 6).toISOString().slice(0, 10)
+    complianceSets.set(dateKey, new Set<string>())
+  }
+
+  const todayLoggers = new Set<string>()
+  const lastWeekLoggers = new Set<string>()
+  const clientSummaryMap = new Map<string, ClientSummary>()
+  const activityMap = new Map<string, ClientActivity>()
+
+  for (const clientId of clientIds) {
+    clientSummaryMap.set(clientId, {
+      client_id: clientId,
+      client_name: profileMap.get(clientId) ?? "",
+      trainer_id: authUserId,
+      total_meals_logged_today: 0,
+      total_calories_today: 0,
+      total_protein_today: 0,
+      total_carbs_today: 0,
+      total_fat_today: 0,
+      active_strike_count: strikeCountMap.get(clientId) ?? 0,
+    })
+
+    activityMap.set(clientId, {
+      client_id: clientId,
+      client_name: profileMap.get(clientId) ?? "",
+      meals_logged: 0,
+      last_logged_at: null,
+      total_calories: 0,
+      total_protein: 0,
+    })
+  }
+
+  for (const row of logs) {
+    const dateKey = toUtcDateKey(row.logged_at)
+
+    if (dateKey >= complianceWindowStart.slice(0, 10)) {
+      complianceSets.get(dateKey)?.add(row.client_id)
+    }
+
+    if (dateKey === todayKey) {
+      todayLoggers.add(row.client_id)
+      const summary = clientSummaryMap.get(row.client_id)
+      if (summary) {
+        summary.total_meals_logged_today += 1
+        summary.total_calories_today += safeNumber(row.calories)
+        summary.total_protein_today += safeNumber(row.protein_g)
+        summary.total_carbs_today += safeNumber(row.carbs_g)
+        summary.total_fat_today += safeNumber(row.fat_g)
+      }
+    }
+
+    if (dateKey === lastWeekKey) {
+      lastWeekLoggers.add(row.client_id)
+    }
+
+    const activity = activityMap.get(row.client_id)
+    if (activity) {
+      activity.meals_logged += 1
+      activity.total_calories += safeNumber(row.calories)
+      activity.total_protein += safeNumber(row.protein_g)
+      if (!activity.last_logged_at || row.logged_at > activity.last_logged_at) {
+        activity.last_logged_at = row.logged_at
+      }
+    }
+  }
+
+  const clients = [...clientSummaryMap.values()].sort((left, right) =>
+    left.client_name.localeCompare(right.client_name),
+  )
+
+  const complianceOverTime = Array.from({ length: 7 }, (_, index) => {
+    const date = startOfUtcDay(index - 6).toISOString().slice(0, 10)
+    const loggerCount = complianceSets.get(date)?.size ?? 0
+
+    return {
+      date,
+      compliance_rate: activeClients > 0 ? Math.round((loggerCount / activeClients) * 100) : 0,
+    }
+  })
+
+  const clientActivity = [...activityMap.values()]
+    .sort((left, right) => {
+      if (left.last_logged_at === right.last_logged_at) {
+        return left.client_name.localeCompare(right.client_name)
+      }
+      if (!left.last_logged_at) return 1
+      if (!right.last_logged_at) return -1
+      return right.last_logged_at.localeCompare(left.last_logged_at)
+    })
+    .slice(0, 50)
+
+  const complianceRate = activeClients > 0
+    ? Math.round((todayLoggers.size / activeClients) * 100)
+    : 0
+
+  const atRiskClients = clients.filter((client) => isClientAtRisk(client)).length
+  const todayRatio = activeClients > 0 ? todayLoggers.size / activeClients : 0
+  const lastWeekRatio = activeClients > 0 ? lastWeekLoggers.size / activeClients : 0
+
+  let weeklyProgress = 0
+  if (lastWeekRatio > 0) {
+    weeklyProgress = Math.round(((todayRatio - lastWeekRatio) / lastWeekRatio) * 100)
+    weeklyProgress = Math.max(-100, Math.min(100, weeklyProgress))
+  } else if (todayRatio > 0) {
+    weeklyProgress = 100
+  }
+
+  return {
+    success: true,
+    data: {
+      version: "v1",
+      trainer: {
+        id: trainer.trainer_id,
+        auth_user_id: trainer.auth_user_id,
+        onboarding_status: trainer.onboarding_status,
+        business_name: trainer.business_name,
+        timezone: trainer.timezone,
+        country: trainer.country,
+      },
+      clients,
+      metrics: {
+        activeClients,
+        complianceRate,
+        weeklyProgress,
+        atRiskClients,
+      },
+      trends: {
+        complianceOverTime,
+        clientActivity,
+      },
+    },
+  }
+}
+
 // ── Public API ──────────────────────────────────────────────────────
 
 export async function getDashboardData(
@@ -177,17 +476,19 @@ export async function getDashboardData(
   })
 
   if (error) {
+    const fallback = await readDashboardDataDirect(authUserId)
+    if (fallback.success || fallback.error.code === "TRAINER_NOT_FOUND") {
+      return fallback
+    }
+
     return makeError(
-      "TEMPORARY_DB_FAILURE",
-      `Dashboard RPC error: ${error.message}`,
+      "PERMANENT_DB_ERROR",
+      `Dashboard RPC error: ${error.message}. ${fallback.error.message}`,
     )
   }
 
   if (!data) {
-    return makeError(
-      "TRAINER_NOT_FOUND",
-      "No trainer row exists for this user. The onboarding trigger may not have fired.",
-    )
+    return readDashboardDataDirect(authUserId)
   }
 
   const dto = mapDashboardData(data)

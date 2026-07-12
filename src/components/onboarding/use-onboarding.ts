@@ -26,14 +26,6 @@ export function useOnboardingForm() {
       businessName: "",
       timezone: undefined,
       country: undefined,
-      coachingStyle: undefined,
-      experienceLevel: undefined,
-      specialties: [],
-      languages: [],
-      defaultAvailability: "",
-      whatsappConnected: false,
-      expectedClientCount: undefined,
-      coachingGoals: "",
     },
     mode: "onTouched",
   });
@@ -55,16 +47,11 @@ export function useOnboardingForm() {
       setSubmitError(null);
       const data = form.getValues();
       const result = await completeOnboardingAction({
+        fullName: data.fullName,
+        displayName: data.displayName,
         businessName: data.businessName,
         timezone: data.timezone,
         country: data.country,
-        coachingStyle: data.coachingStyle,
-        experienceLevel: data.experienceLevel,
-        specialties: data.specialties,
-        languages: data.languages,
-        defaultAvailability: data.defaultAvailability,
-        expectedClientCount: data.expectedClientCount,
-        coachingGoals: data.coachingGoals,
       });
       setSubmitting(false);
       if (result.error) {

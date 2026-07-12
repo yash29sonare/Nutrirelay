@@ -6,6 +6,7 @@ import { dispatchPlans } from "@/lib/communications/communicationOrchestrator"
 import { appendEvents, getEvents } from "@/lib/events/engagementEventStore"
 import type { EngagementEvent, EngagementEventInput } from "@/types/engagement-events"
 import type { MealRecord } from "@/types/meal"
+import { buildRoutineTimingForScheduler } from "@/lib/whatsapp/onboardingService"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,8 @@ interface ClientData {
   events: EngagementEvent[]
   mealsToday: number
   lastMealTimestamp: string | null
+  routine: Record<string, unknown> | null
+  onboardingCollectedData: Record<string, unknown> | null
 }
 
 // ── DB helpers ───────────────────────────────────────────────────────────────
@@ -112,16 +115,60 @@ async function loadMealsForClients(
   return allMeals
 }
 
+async function loadSchedulesForClients(clientIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+  if (clientIds.length === 0) return new Map()
+
+  const db = getDb()
+  const { data } = await db
+    .from("client_workout_schedules")
+    .select("*")
+    .in("client_id", clientIds)
+
+  const map = new Map<string, Record<string, unknown>>()
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const clientId = typeof row.client_id === "string" ? row.client_id : null
+    if (clientId && !map.has(clientId)) {
+      map.set(clientId, row)
+    }
+  }
+  return map
+}
+
+async function loadOnboardingStatesForClients(clientIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+  if (clientIds.length === 0) return new Map()
+
+  const db = getDb()
+  const { data } = await db
+    .from("client_onboarding_states")
+    .select("client_id, collected_data")
+    .in("client_id", clientIds)
+
+  const map = new Map<string, Record<string, unknown>>()
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const clientId = typeof row.client_id === "string" ? row.client_id : null
+    const collectedData = row.collected_data && typeof row.collected_data === "object"
+      ? row.collected_data as Record<string, unknown>
+      : null
+    if (clientId && collectedData && !map.has(clientId)) {
+      map.set(clientId, collectedData)
+    }
+  }
+
+  return map
+}
+
 function buildClientData(
   clientId: string,
   meals: MealRecord[],
   allEvents: EngagementEvent[],
+  routine: Record<string, unknown> | null,
+  onboardingCollectedData: Record<string, unknown> | null,
 ): ClientData {
   const clientEvents = allEvents.filter((e) => e.client_id === clientId)
   const mealsToday = meals.filter((m) => isToday(m.mealTimestamp)).length
   const lastMealTimestamp = meals.length > 0 ? meals[0].mealTimestamp : null
 
-  return { clientId, meals, events: clientEvents, mealsToday, lastMealTimestamp }
+  return { clientId, meals, events: clientEvents, mealsToday, lastMealTimestamp, routine, onboardingCollectedData }
 }
 
 // ── Trainer processing ───────────────────────────────────────────────────────
@@ -142,11 +189,19 @@ async function processTrainer(
 
   // Load data
   const mealsMap = await loadMealsForClients(uniqueClientIds)
+  const schedulesMap = await loadSchedulesForClients(uniqueClientIds)
+  const onboardingStatesMap = await loadOnboardingStatesForClients(uniqueClientIds)
   const allEvents = await getEvents(trainerId)
 
   // Build per-client data
   const clientsData: ClientData[] = uniqueClientIds.map((cid) =>
-    buildClientData(cid, mealsMap.get(cid) ?? [], allEvents),
+    buildClientData(
+      cid,
+      mealsMap.get(cid) ?? [],
+      allEvents,
+      schedulesMap.get(cid) ?? null,
+      onboardingStatesMap.get(cid) ?? null,
+    ),
   )
 
   // Generate conversation plans (meal gap checks)
@@ -182,6 +237,11 @@ async function processTrainer(
       events: cd.events,
       mealsToday: cd.mealsToday,
       lastMealTimestamp: cd.lastMealTimestamp,
+      routine: buildRoutineTimingForScheduler(cd.routine, cd.onboardingCollectedData),
+      routineAnchorTime:
+        typeof cd.routine?.preferred_checkin_time === "string"
+          ? cd.routine.preferred_checkin_time
+          : null,
     })),
     (events) => appendEvents(trainerId, events),
   )

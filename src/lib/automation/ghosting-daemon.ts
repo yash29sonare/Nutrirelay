@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js";
-import { sendTemplateMessage } from "@/lib/whatsapp/send";
 import { writeAuditLog } from "@/lib/operations/audit";
 
 // Clients silent for this long are considered ghosting
@@ -113,23 +112,8 @@ export async function runGhostingAudit(): Promise<void> {
       }).catch(() => {});
     }
 
-    // ── 6. Send re-engagement template ────────────────────────────────────
-    try {
-      await sendTemplateMessage(
-        trainerId,
-        phone,
-        "trainer_alert",
-        [clientName, `No activity for ${silenceHours} hours`]
-      );
-      console.log(
-        `[ghosting-daemon] alert sent to ${phone} (${silenceHours}h silent)`
-      );
-    } catch (err) {
-      console.error(
-        "[ghosting-daemon] message send failed for",
-        phone,
-        (err as Error).message
-      );
-    }
+    console.log(
+      `[ghosting-daemon] automation paused for ${phone} (${silenceHours}h silent)`
+    );
   }
 }
