@@ -32,6 +32,7 @@ export interface WhatsAppInteractiveReply {
   timestamp: number
   button_reply_id: string
   button_reply_title: string
+  reply_kind: 'button_reply' | 'list_reply'
 }
 
 export type ParsedWhatsAppMessage =
@@ -97,12 +98,14 @@ export function parseInboundMessage(body: unknown): ParsedWhatsAppMessage | null
         }
 
       case 'interactive': {
-        const reply = msg.interactive?.button_reply
+        const buttonReply = msg.interactive?.button_reply
+        const listReply = msg.interactive?.list_reply
         return {
           ...base,
           type:                'interactive',
-          button_reply_id:     reply?.id ?? '',
-          button_reply_title:  reply?.title ?? '',
+          button_reply_id:     buttonReply?.id ?? listReply?.id ?? '',
+          button_reply_title:  buttonReply?.title ?? listReply?.title ?? '',
+          reply_kind:          buttonReply ? 'button_reply' : 'list_reply',
         }
       }
 

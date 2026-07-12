@@ -9,6 +9,10 @@ vi.mock("@/lib/events/engagementEventStore", () => ({
   getEvents: vi.fn().mockResolvedValue([]),
 }))
 
+vi.mock("@/lib/whatsapp/automation-state", () => ({
+  getClientAutomationState: vi.fn().mockResolvedValue("active"),
+}))
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
     from: vi.fn(() => ({
@@ -22,6 +26,7 @@ vi.mock("@supabase/supabase-js", () => ({
 import { dispatchPlans } from "@/lib/communications/communicationOrchestrator"
 import { sendTemplateMessage } from "@/lib/whatsapp/send"
 import { appendEvents, getEvents } from "@/lib/events/engagementEventStore"
+import { getClientAutomationState } from "@/lib/whatsapp/automation-state"
 import { createConversationPlan, createReminderPlan } from "../builders/index"
 
 describe("communicationOrchestrator", () => {
@@ -89,5 +94,16 @@ describe("communicationOrchestrator", () => {
     const convPlan = createConversationPlan({ clientId: "c1" })
     const result1 = await dispatchPlans("t1", [convPlan], [])
     expect(result1.some((r) => r.status === "sent")).toBe(true)
+  })
+
+  it("suppresses outbound automation when the client is paused for no response", async () => {
+    vi.mocked(getClientAutomationState).mockResolvedValue("paused_no_response")
+
+    const convPlan = createConversationPlan({ clientId: "c1" })
+    const result = await dispatchPlans("t1", [convPlan], [])
+
+    expect(result[0]?.status).toBe("skipped")
+    expect(result[0]?.reason).toContain("48h")
+    expect(sendTemplateMessage).not.toHaveBeenCalled()
   })
 })

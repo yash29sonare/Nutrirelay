@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { sendTemplateMessage, type TemplateId, type TemplateParamMap } from "@/lib/whatsapp/send"
 import { appendEvents, getEvents } from "@/lib/events/engagementEventStore"
+import { getClientAutomationState } from "@/lib/whatsapp/automation-state"
 import type { ConversationPlan } from "@/types/conversation"
 import type { ReminderPlan } from "@/types/reminder"
 
@@ -102,6 +103,16 @@ async function dispatchConversationPlan(
     return { planId, type: "conversation", status: "skipped", reason: "No phone number on file" }
   }
 
+  const automationState = await getClientAutomationState(plan.context.clientId)
+  if (automationState === "paused_no_response") {
+    return {
+      planId,
+      type: "conversation",
+      status: "skipped",
+      reason: "Automation paused after 48h without inbound reply",
+    }
+  }
+
   // Append QUEUED event
   const queuedId = makeEventId("comm-queued", planId)
   await appendEvents(trainerId, [
@@ -174,6 +185,16 @@ async function dispatchReminderPlan(
 
   if (!phone) {
     return { planId, type: "reminder", status: "skipped", reason: "No phone number on file" }
+  }
+
+  const automationState = await getClientAutomationState(plan.context.clientId)
+  if (automationState === "paused_no_response") {
+    return {
+      planId,
+      type: "reminder",
+      status: "skipped",
+      reason: "Automation paused after 48h without inbound reply",
+    }
   }
 
   // Append QUEUED event

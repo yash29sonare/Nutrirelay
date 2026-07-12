@@ -1,6 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
 import { getTrainerWaba } from "@/lib/waba/getTrainerWaba";
 import { logCommunication } from "@/lib/communication-logger";
+import { getWhatsAppServiceDb, normalizeWhatsAppPhone } from "@/lib/whatsapp/service-db";
 
 // ── Custom errors ──────────────────────────────────────────────────────────────
 
@@ -20,35 +20,38 @@ export class WhatsAppDeliveryError extends Error {
   }
 }
 
-// ── Service-role client (server-only) ─────────────────────────────────────────
-
-function getServiceClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
-// ── Phone normalization ────────────────────────────────────────────────────────
-
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  return digits.startsWith("0") ? digits.slice(1) : digits;
-}
-
 // ── 24h window helpers ────────────────────────────────────────────────────────
 
 async function getLastInboundAt(normalizedPhone: string): Promise<string | null> {
-  const supabase = getServiceClient();
-  const { data } = await supabase
-    .from("incoming_webhook_logs")
-    .select("received_at")
-    .eq("client_phone", normalizedPhone)
-    .order("received_at", { ascending: false })
-    .limit(1)
-    .single();
+  const supabase = getWhatsAppServiceDb();
+  const [{ data: processedInbound }, { data: webhookInbound }] = await Promise.all([
+    supabase
+      .from("incoming_webhook_logs")
+      .select("received_at")
+      .eq("client_phone", normalizedPhone)
+      .order("received_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("whatsapp_webhook_events")
+      .select("received_at")
+      .eq("client_phone", normalizedPhone)
+      .eq("event_category", "message")
+      .order("received_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  return (data as { received_at: string } | null)?.received_at ?? null;
+  const timestamps = [
+    (processedInbound as { received_at: string } | null)?.received_at ?? null,
+    (webhookInbound as { received_at: string } | null)?.received_at ?? null,
+  ].filter((value): value is string => Boolean(value));
+
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  return timestamps.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
 }
 
 function isWindowOpen(lastInboundAt: string | null): boolean {
@@ -59,6 +62,7 @@ function isWindowOpen(lastInboundAt: string | null): boolean {
 // ── Template registry ──────────────────────────────────────────────────────────
 
 export type TemplateId =
+  | "hello_world"
   | "meal_confirmation"
   | "missing_details_clarification"
   | "trainer_alert"
@@ -66,6 +70,7 @@ export type TemplateId =
   | "renewal_reminder_urgent";
 
 export type TemplateParamMap = {
+  hello_world: [];
   meal_confirmation: [clientName: string, mealName: string, calories: string];
   missing_details_clarification: [clientName: string];
   trainer_alert: [clientName: string, alertDetail: string];
@@ -81,13 +86,20 @@ interface TemplateComponent {
 interface TemplatePayload {
   name: string;
   language: { code: string };
-  components: TemplateComponent[];
+  components?: TemplateComponent[];
 }
 
 function buildTemplatePayload<T extends TemplateId>(
   templateId: T,
   params: TemplateParamMap[T]
 ): TemplatePayload {
+  if (templateId === "hello_world") {
+    return {
+      name: "hello_world",
+      language: { code: "en_US" },
+    };
+  }
+
   const bodyParams = (params as unknown[]).map((p) => ({
     type: "text" as const,
     text: String(p),
@@ -126,10 +138,36 @@ interface MetaDocumentMessage {
   document: { link: string; filename: string; caption?: string };
 }
 
+interface MetaInteractiveListMessage {
+  messaging_product: "whatsapp";
+  recipient_type: "individual";
+  to: string;
+  type: "interactive";
+  interactive: {
+    type: "list";
+    body: { text: string };
+    action: {
+      button: string;
+      sections: Array<{
+        title: string;
+        rows: Array<{
+          id: string;
+          title: string;
+          description?: string;
+        }>;
+      }>;
+    };
+  };
+}
+
+interface MetaSendResponse {
+  messages?: Array<{ id?: string }>;
+}
+
 async function callMetaApi(
   trainerId: string,
-  payload: MetaTextMessage | MetaTemplateMessage | MetaDocumentMessage
-): Promise<void> {
+  payload: MetaTextMessage | MetaTemplateMessage | MetaDocumentMessage | MetaInteractiveListMessage
+): Promise<{ wamId: string | null }> {
   const { phoneNumberId, accessToken } = await getTrainerWaba(trainerId);
 
   const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
@@ -154,13 +192,17 @@ async function callMetaApi(
     console.error("[send] Meta Graph API delivery failure:", detail);
     throw new WhatsAppDeliveryError(res.status, detail);
   }
+
+  const json = (await res.json()) as MetaSendResponse;
+  return { wamId: json.messages?.[0]?.id ?? null };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function resolveClientIdFromPhone(phone: string): Promise<string | null> {
-  const supabase = getServiceClient();
-  const normalized = normalizePhone(phone);
+  const supabase = getWhatsAppServiceDb();
+  const normalized = normalizeWhatsAppPhone(phone);
+  if (!normalized) return null;
   const { data } = await supabase
     .from("profiles")
     .select("id")
@@ -170,27 +212,61 @@ async function resolveClientIdFromPhone(phone: string): Promise<string | null> {
   return (data as { id: string } | null)?.id ?? null;
 }
 
+async function logOutboundCommunicationByPhone(input: {
+  trainerId: string;
+  clientPhone: string;
+  wamId: string | null;
+  messageType: "TEXT" | "VOICE" | "IMAGE" | "POLL" | "TEMPLATE";
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const clientId = await resolveClientIdFromPhone(input.clientPhone);
+  if (!clientId) return;
+
+  await logCommunication({
+    trainer_id: input.trainerId,
+    client_id: clientId,
+    direction: "OUTBOUND",
+    message_type: input.messageType,
+    wam_id: input.wamId,
+    delivery_status: "sent",
+    metadata: input.metadata ?? {},
+  });
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 export async function sendFreeMessage(
   trainerId: string,
   clientPhone: string,
   text: string
-): Promise<void> {
-  const normalized = normalizePhone(clientPhone);
+): Promise<{ wamId: string | null }> {
+  const normalized = normalizeWhatsAppPhone(clientPhone);
+  if (!normalized) {
+    throw new Error("Client phone number is required");
+  }
   const lastAt = await getLastInboundAt(normalized);
 
   if (!isWindowOpen(lastAt)) {
     throw new WindowClosedError(normalized);
   }
 
-  await callMetaApi(trainerId, {
+  const result = await callMetaApi(trainerId, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: normalized,
     type: "text",
     text: { body: text, preview_url: false },
   });
+
+  await logOutboundCommunicationByPhone({
+    trainerId,
+    clientPhone: normalized,
+    wamId: result.wamId,
+    messageType: "TEXT",
+    metadata: { message_preview: text.slice(0, 280) },
+  });
+
+  return result;
 }
 
 export async function sendTemplateMessage<T extends TemplateId>(
@@ -198,11 +274,14 @@ export async function sendTemplateMessage<T extends TemplateId>(
   clientPhone: string,
   templateId: T,
   params: TemplateParamMap[T]
-): Promise<void> {
-  const normalized = normalizePhone(clientPhone);
+): Promise<{ wamId: string | null }> {
+  const normalized = normalizeWhatsAppPhone(clientPhone);
+  if (!normalized) {
+    throw new Error("Client phone number is required");
+  }
   const template = buildTemplatePayload(templateId, params);
 
-  await callMetaApi(trainerId, {
+  const result = await callMetaApi(trainerId, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: normalized,
@@ -210,17 +289,15 @@ export async function sendTemplateMessage<T extends TemplateId>(
     template,
   });
 
-  const clientId = await resolveClientIdFromPhone(normalized);
-  if (clientId) {
-    await logCommunication({
-      trainer_id: trainerId,
-      client_id: clientId,
-      direction: "OUTBOUND",
-      message_type: "TEMPLATE",
-      delivery_status: "sent",
-      metadata: { template_id: templateId },
-    });
-  }
+  await logOutboundCommunicationByPhone({
+    trainerId,
+    clientPhone: normalized,
+    wamId: result.wamId,
+    messageType: "TEMPLATE",
+    metadata: { template_id: templateId },
+  });
+
+  return result;
 }
 
 export async function sendDocumentMessage(
@@ -229,10 +306,13 @@ export async function sendDocumentMessage(
   documentLink: string,
   filename: string,
   caption?: string
-): Promise<void> {
-  const normalized = normalizePhone(clientPhone);
+): Promise<{ wamId: string | null }> {
+  const normalized = normalizeWhatsAppPhone(clientPhone);
+  if (!normalized) {
+    throw new Error("Client phone number is required");
+  }
 
-  await callMetaApi(trainerId, {
+  const result = await callMetaApi(trainerId, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: normalized,
@@ -240,17 +320,82 @@ export async function sendDocumentMessage(
     document: { link: documentLink, filename, caption },
   });
 
-  const clientId = await resolveClientIdFromPhone(normalized);
-  if (clientId) {
-    await logCommunication({
-      trainer_id: trainerId,
-      client_id: clientId,
-      direction: "OUTBOUND",
-      message_type: "TEXT",
-      delivery_status: "sent",
-      metadata: { document_filename: filename, has_caption: !!caption },
-    });
+  await logOutboundCommunicationByPhone({
+    trainerId,
+    clientPhone: normalized,
+    wamId: result.wamId,
+    messageType: "TEXT",
+    metadata: { document_filename: filename, has_caption: !!caption },
+  });
+
+  return result;
+}
+
+export interface InteractiveListOption {
+  id: string;
+  title: string;
+  description?: string;
+}
+
+export async function sendInteractiveListMessage(input: {
+  trainerId: string;
+  clientPhone: string;
+  prompt: string;
+  buttonText: string;
+  sectionTitle: string;
+  options: InteractiveListOption[];
+}): Promise<{ wamId: string | null }> {
+  const normalized = normalizeWhatsAppPhone(input.clientPhone);
+  if (!normalized) {
+    throw new Error("Client phone number is required");
   }
+
+  const lastAt = await getLastInboundAt(normalized);
+  if (!isWindowOpen(lastAt)) {
+    throw new WindowClosedError(normalized);
+  }
+
+  if (input.options.length === 0 || input.options.length > 10) {
+    throw new Error("Interactive list requires between 1 and 10 options");
+  }
+
+  const result = await callMetaApi(input.trainerId, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalized,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: input.prompt },
+      action: {
+        button: input.buttonText,
+        sections: [
+          {
+            title: input.sectionTitle,
+            rows: input.options.map((option) => ({
+              id: option.id,
+              title: option.title,
+              description: option.description,
+            })),
+          },
+        ],
+      },
+    },
+  });
+
+  await logOutboundCommunicationByPhone({
+    trainerId: input.trainerId,
+    clientPhone: normalized,
+    wamId: result.wamId,
+    messageType: "POLL",
+    metadata: {
+      interactive_kind: "list",
+      prompt: input.prompt,
+      options: input.options,
+    },
+  });
+
+  return result;
 }
 
 export async function sendMessage(
@@ -260,17 +405,14 @@ export async function sendMessage(
   fallbackTemplateId: TemplateId,
   fallbackParams: TemplateParamMap[TemplateId]
 ): Promise<void> {
-  const normalized = normalizePhone(clientPhone);
+  const normalized = normalizeWhatsAppPhone(clientPhone);
+  if (!normalized) {
+    throw new Error("Client phone number is required");
+  }
   const lastAt = await getLastInboundAt(normalized);
 
   if (isWindowOpen(lastAt)) {
-    await callMetaApi(trainerId, {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: normalized,
-      type: "text",
-      text: { body: text, preview_url: false },
-    });
+    await sendFreeMessage(trainerId, normalized, text);
   } else {
     await sendTemplateMessage(
       trainerId,

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { updateWebhookEventRecordsByWamId } from '@/lib/whatsapp/webhook-events'
 
 interface QueueMessage {
   wam_id: string
@@ -8,6 +9,8 @@ interface QueueMessage {
   message_text: string | null
   media_id: string | null
   button_reply_id: string | null
+  reply_kind?: 'button_reply' | 'list_reply' | null
+  context_wam_id?: string | null
   raw_entry: unknown
 }
 
@@ -24,6 +27,7 @@ let isRunning = false
 interface ProcessMessageResult {
   status: "SUCCESS" | "FAILURE_HANDLED" | "RETRY"
   wam_id: string
+  eventStatus?: "processed" | "skipped" | "failed_handled"
   error?: string
   fallback_message?: string
 }
@@ -82,7 +86,7 @@ async function processMessage(record: PgmqRecord): Promise<ProcessMessageResult>
     }
 
     if (!trainerId) {
-      return { status: "FAILURE_HANDLED", wam_id, error: "no active trainer" }
+      return { status: "FAILURE_HANDLED", wam_id, eventStatus: "failed_handled", error: "no active trainer" }
     }
 
     try {
@@ -92,7 +96,7 @@ async function processMessage(record: PgmqRecord): Promise<ProcessMessageResult>
       const workflow = (mastra as any).getWorkflow('whatsappPipeline')
       const run = await workflow.createRun()
 
-      await run.start({
+      const workflowResult = await run.start({
         inputData: {
           wam_id,
           client_phone,
@@ -103,13 +107,38 @@ async function processMessage(record: PgmqRecord): Promise<ProcessMessageResult>
             message_text,
             media_id,
             button_reply_id,
+            reply_kind: message.reply_kind ?? null,
+            context_wam_id: message.context_wam_id ?? null,
           }),
         },
       })
 
-      return { status: "SUCCESS", wam_id }
+      if (!workflowResult || workflowResult.status !== "success") {
+        return { status: "FAILURE_HANDLED", wam_id, eventStatus: "failed_handled", error: "workflow execution failed" }
+      }
+
+      const output = workflowResult.result as {
+        shouldProcess?: boolean
+        success?: boolean
+        skipReason?: string | null
+      }
+
+      if (output?.shouldProcess === true && output?.success === false) {
+        return {
+          status: "FAILURE_HANDLED",
+          wam_id,
+          eventStatus: "failed_handled",
+          error: output.skipReason ?? "workflow completed without persistence",
+        }
+      }
+
+      return {
+        status: "SUCCESS",
+        wam_id,
+        eventStatus: output?.shouldProcess === false ? "skipped" : "processed",
+      }
     } catch (err) {
-      return { status: "FAILURE_HANDLED", wam_id, error: (err as Error).message }
+      return { status: "FAILURE_HANDLED", wam_id, eventStatus: "failed_handled", error: (err as Error).message }
     }
   } catch (err) {
     return { status: "RETRY", wam_id: (record as any)?.message?.wam_id ?? "", error: (err as Error).message }
@@ -301,6 +330,21 @@ async function pollQueue(): Promise<void> {
       result = { status: "RETRY", wam_id: claimWamId, error: `state commit failed: ${stateError.message}` }
       finalStatus = "RETRY"
     } else {
+      await updateWebhookEventRecordsByWamId(claimWamId, {
+        processingStatus:
+          result.eventStatus === "processed"
+            ? "processed"
+            : result.eventStatus === "skipped"
+              ? "skipped"
+              : result.eventStatus === "failed_handled"
+                ? "failed_handled"
+                : undefined,
+        processingMetadata: {
+          final_status: result.eventStatus ?? finalStatus.toLowerCase(),
+          queue_status: finalStatus,
+          error: result.error ?? null,
+        },
+      })
       console.log("[EVENT] outcome=state_commit wam_id:", claimWamId, "status:", finalStatus)
     }
 
