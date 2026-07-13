@@ -21,14 +21,17 @@ export interface VoiceNoteRow {
 
 interface RecoveryGridProps {
   initialRows: VoiceNoteRow[];
+  currentTimeMs: number;
 }
 
 function NoteCard({
   row,
   onResolved,
+  currentTimeMs,
 }: {
   row: VoiceNoteRow;
   onResolved: (id: string) => void;
+  currentTimeMs: number;
 }) {
   const [transcript, setTranscript] = useState(row.transcript ?? "");
   const [saving, setSaving] = useState(false);
@@ -65,7 +68,7 @@ function NoteCard({
   }
 
   const isStale =
-    Date.now() - new Date(row.created_at).getTime() > 24 * 60 * 60 * 1000;
+    currentTimeMs - new Date(row.created_at).getTime() > 24 * 60 * 60 * 1000;
 
   return (
     <Card>
@@ -148,7 +151,7 @@ function NoteCard({
   );
 }
 
-export function RecoveryGrid({ initialRows }: RecoveryGridProps) {
+export function RecoveryGrid({ initialRows, currentTimeMs }: RecoveryGridProps) {
   const [rows, setRows] = useState<VoiceNoteRow[]>(initialRows);
 
   function handleResolved(id: string) {
@@ -174,6 +177,7 @@ export function RecoveryGrid({ initialRows }: RecoveryGridProps) {
           key={row.id}
           row={row}
           onResolved={handleResolved}
+          currentTimeMs={currentTimeMs}
         />
       ))}
     </div>

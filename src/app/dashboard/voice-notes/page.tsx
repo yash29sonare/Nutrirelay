@@ -70,13 +70,14 @@ export default async function VoiceNotesPage() {
   const trainerId = user?.id ?? null;
 
   const rows = trainerId ? await fetchFailedVoiceNotes(trainerId) : [];
+  const currentTimeMs = new Date().getTime();
 
   const staleCount = rows.filter(
-    (r) => Date.now() - new Date(r.created_at).getTime() > 24 * MS_PER_HOUR
+    (r) => currentTimeMs - new Date(r.created_at).getTime() > 24 * MS_PER_HOUR
   ).length;
 
   return (
-    <PageContainer className="max-w-5xl">
+    <PageContainer>
       <PageHeader
         title="Voice Note Recovery"
         description="Failed transcriptions awaiting manual resolution."
@@ -121,7 +122,7 @@ export default async function VoiceNotesPage() {
           title="Sign in to view recovery queue."
         />
       ) : (
-        <RecoveryGrid initialRows={rows} />
+        <RecoveryGrid initialRows={rows} currentTimeMs={currentTimeMs} />
       )}
     </PageContainer>
   );

@@ -2,14 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Dumbbell, X } from "lucide-react";
-import { NAV_SECTIONS, isActivePath } from "@/lib/navigation";
+import { X } from "lucide-react";
+import { BrandMark } from "@/components/brand/BrandMark";
+import { getNavSections, isActivePath } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { useShell } from "./shell-context";
 
-export function MobileNav() {
+interface MobileNavProps {
+  isAdmin: boolean;
+  displayName: string;
+}
+
+export function MobileNav({ isAdmin, displayName }: MobileNavProps) {
   const pathname = usePathname();
   const { mobileNavOpen, closeMobileNav } = useShell();
+  const navSections = getNavSections(isAdmin);
 
   if (!mobileNavOpen) return null;
 
@@ -27,11 +34,9 @@ export function MobileNav() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-[var(--surface-border)]">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-500">
-              <Dumbbell size={16} className="text-white" />
-            </div>
+            <BrandMark />
             <span className="font-semibold text-sm tracking-tight text-[var(--foreground)]">
-              Fortress Fitness
+              NutriRelay
             </span>
           </div>
           <button
@@ -46,13 +51,14 @@ export function MobileNav() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-          {NAV_SECTIONS.map((section) => (
+          {navSections.map((section) => (
             <div key={section.title}>
               <p className="px-3 mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
                 {section.title}
               </p>
               <div className="space-y-0.5">
-                {section.items.map(({ label, href, icon: Icon, badge, disabled }) => {
+                {section.items.map(({ label, href, icon: Icon, badge, disabled, description }) => {
+                  const navKey = href === "#" ? label : href
                   const active = isActivePath(pathname, href);
                   const classes = cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
@@ -76,7 +82,7 @@ export function MobileNav() {
 
                   if (disabled) {
                     return (
-                      <span key={href} className={classes}>
+                      <span key={navKey} className={classes} title={description}>
                         {iconEl}
                         {label}
                         {badge && (
@@ -90,10 +96,11 @@ export function MobileNav() {
 
                   return (
                     <Link
-                      key={href}
+                      key={navKey}
                       href={href}
                       onClick={closeMobileNav}
                       className={classes}
+                      title={description}
                     >
                       {iconEl}
                       {label}
@@ -110,20 +117,24 @@ export function MobileNav() {
           ))}
         </nav>
 
-        {/* Trainer footer */}
-        <div className="px-4 py-4 border-t border-[var(--surface-border)]">
+        {/* Trainer footer — links to Settings */}
+        <Link
+          href="/dashboard/settings"
+          onClick={closeMobileNav}
+          className="block px-4 py-4 border-t border-[var(--surface-border)]"
+        >
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full bg-[var(--surface-overlay)] flex items-center justify-center shrink-0">
               <span className="text-xs font-semibold text-[var(--muted)]">T</span>
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium text-[var(--foreground)] truncate">
-                Trainer
+                {displayName}
               </p>
-              <p className="text-xs text-[var(--muted)] truncate">Pro Plan</p>
+              <p className="text-xs text-[var(--muted)] truncate">Settings</p>
             </div>
           </div>
-        </div>
+        </Link>
       </aside>
     </div>
   );

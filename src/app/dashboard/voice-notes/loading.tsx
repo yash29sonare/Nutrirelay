@@ -4,7 +4,7 @@ import { PulseLine } from "@/components/ui/LoadingState";
 
 export default function VoiceNotesLoading() {
   return (
-    <PageContainer className="max-w-5xl">
+    <PageContainer>
       <div className="space-y-1.5">
         <PulseLine className="h-6 w-48" />
         <PulseLine className="h-4 w-56" />

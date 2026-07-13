@@ -16,10 +16,10 @@ export function DashboardSection({
   className = "",
 }: DashboardSectionProps) {
   return (
-    <section className={cn("space-y-4", className)} aria-label={title}>
+    <section className={cn("space-y-5", className)} aria-label={title}>
       {(title || actions) && (
         <div className="flex items-start justify-between gap-4">
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {title && (
               <h2 className="text-sm font-semibold text-[var(--foreground)]">
                 {title}

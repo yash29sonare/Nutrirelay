@@ -1,18 +1,64 @@
 "use client";
 
-import { Bell, Search, Menu } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bell, LogOut, Menu, MoonStar, Settings, User } from "lucide-react";
+import { createBrowserClient } from "@supabase/ssr";
+import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { useTheme } from "@/components/theme/ThemeProvider";
 import { useShell } from "./shell-context";
 import { Breadcrumbs } from "./Breadcrumbs";
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+  displayName: string;
+  email: string;
+}
+
+function getSupabase() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
+
+export function DashboardHeader({ displayName, email }: DashboardHeaderProps) {
   const { toggleSidebar, openMobileNav } = useShell();
+  const router = useRouter();
+  const { resolved, setTheme } = useTheme();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!headerRef.current?.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+        setProfileOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  async function handleSignOut() {
+    const supabase = getSupabase();
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  }
+
+  function openSettings(anchor?: string) {
+    setProfileOpen(false);
+    router.push(anchor ? `/dashboard/settings${anchor}` : "/dashboard/settings");
+  }
 
   return (
-    <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-[var(--surface-border)] bg-[var(--background)] shrink-0">
-      {/* Left: mobile menu + breadcrumbs */}
+    <header
+      ref={headerRef}
+      className="relative flex items-center justify-between border-b border-[var(--surface-border)] bg-[var(--background)] px-4 py-3 shrink-0 md:px-6"
+    >
       <div className="flex items-center gap-3 min-w-0">
-        {/* Mobile hamburger */}
         <button
           type="button"
           aria-label="Open navigation"
@@ -22,7 +68,6 @@ export function DashboardHeader() {
           <Menu size={17} />
         </button>
 
-        {/* Desktop sidebar toggle */}
         <button
           type="button"
           aria-label="Toggle sidebar"
@@ -32,58 +77,125 @@ export function DashboardHeader() {
           <Menu size={17} />
         </button>
 
-        {/* AI Live badge */}
-        <span
-          aria-label="AI pipelines live"
-          className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-brand-500/10 text-brand-600 dark:text-brand-400"
-        >
-          <span
-            aria-hidden="true"
-            className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse"
-          />
-          AI Live
-        </span>
-
         <div className="hidden md:block">
           <Breadcrumbs />
         </div>
       </div>
 
-      {/* Right: search, theme, notifications, avatar */}
       <div className="flex items-center gap-2">
-        {/* Global search */}
-        <button
-          type="button"
-          aria-label="Search"
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-[var(--muted)] border border-[var(--surface-border)] bg-[var(--surface-raised)] hover:bg-[var(--surface-overlay)] transition-colors"
-        >
-          <Search size={13} />
-          <span>Search...</span>
-          <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--surface-overlay)] text-[var(--muted)]">
-            Ctrl+K
-          </span>
-        </button>
-
         <ThemeToggle />
 
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative flex items-center justify-center w-8 h-8 rounded-lg text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-overlay)] transition-all duration-150"
-        >
-          <Bell size={17} />
-          <span
-            aria-hidden="true"
-            className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-red-500"
-          />
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Notifications"
+            aria-expanded={notificationsOpen}
+            onClick={() => {
+              setNotificationsOpen((open) => !open);
+              setProfileOpen(false);
+            }}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-overlay)] transition-all duration-150"
+            title="Notifications"
+          >
+            <Bell size={17} />
+          </button>
 
-        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-overlay)]">
-          <span className="text-xs font-semibold text-[var(--muted)]">T</span>
+          {notificationsOpen && (
+            <div className="absolute right-0 top-10 z-20 w-72 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-3 shadow-xl">
+              <p className="text-sm font-semibold text-[var(--foreground)]">Notifications</p>
+              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
+                No notifications yet. Operational alerts and delivery issues will appear here.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    router.push("/dashboard/events");
+                  }}
+                  className="inline-flex items-center rounded-md bg-[var(--surface-overlay)] px-3 py-1.5 text-xs text-[var(--foreground)] hover:bg-[var(--surface-border)]"
+                >
+                  Events
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    router.push("/dashboard/communications");
+                  }}
+                  className="inline-flex items-center rounded-md bg-[var(--surface-overlay)] px-3 py-1.5 text-xs text-[var(--foreground)] hover:bg-[var(--surface-border)]"
+                >
+                  Communications
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Open profile menu"
+            aria-expanded={profileOpen}
+            onClick={() => {
+              setProfileOpen((open) => !open);
+              setNotificationsOpen(false);
+            }}
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--surface-border)] transition-colors"
+            title={displayName}
+          >
+            <span className="text-xs font-semibold text-[var(--muted)]">
+              {displayName.charAt(0).toUpperCase()}
+            </span>
+          </button>
+
+          {profileOpen && (
+            <div className="absolute right-0 top-10 z-20 w-72 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-3 shadow-xl">
+              <div className="border-b border-[var(--surface-border)] pb-3">
+                <p className="text-sm font-semibold text-[var(--foreground)]">{displayName}</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">{email}</p>
+              </div>
+
+              <div className="mt-3 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => openSettings("#profile")}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
+                >
+                  <User size={15} />
+                  Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openSettings()}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
+                >
+                  <Settings size={15} />
+                  Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
+                >
+                  <MoonStar size={15} />
+                  Theme
+                  <span className="ml-auto text-xs text-[var(--muted)] capitalize">{resolved}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+                >
+                  <LogOut size={15} />
+                  Sign out
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Mobile breadcrumbs below */}
       <div className="md:hidden absolute top-14 left-4">
         <Breadcrumbs />
       </div>

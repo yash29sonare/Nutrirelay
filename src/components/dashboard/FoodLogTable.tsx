@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import { Card, CardHeader, CardContent } from "@/components/ui/Card";
 
 export interface FoodLogEntry {
@@ -44,18 +41,12 @@ function CategoryBadge({
 }
 
 function FormattedTime({ iso }: { iso: string }) {
-  const [label, setLabel] = useState<string>("—");
+  const label = new Date(iso).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-  // Hydration guard: only format on the client after mount to prevent
-  // server/client timestamp mismatch warnings in Next.js RSC hydration.
-  useEffect(() => {
-    const d = new Date(iso);
-    setLabel(
-      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    );
-  }, [iso]);
-
-  return <span>{label}</span>;
+  return <span suppressHydrationWarning>{label}</span>;
 }
 
 export function FoodLogTable({ entries }: FoodLogTableProps) {
