@@ -59,6 +59,7 @@ Project ref: `tbwemyizhpozdqnjfqvk`
 
 - `supabase/migrations/20260708195000_17_client_onboarding_state_machine.sql`
   - Reason: not enough evidence that it exactly represents remote-applied `20260708142741_17b_onboarding_prerequisites_and_state_machine`.
+  - 2026-07-14 follow-up: verified again during Option D/E production-readiness pass. A local `20260708142741_17b_onboarding_prerequisites_and_state_machine.sql` file was not created because the available local `17` SQL covers onboarding state-machine and workout timing fields, but does not clearly prove the full remote `17b` prerequisites scope.
 - `supabase/migrations/20260703110000_13_whatsapp_testability.sql`
   - Reason: live objects exist, but this prompt did not safely prove a no-op baseline conversion.
 - `supabase/migrations/20260707120000_16_food_log_review_workflow.sql`
@@ -93,6 +94,7 @@ These still require manual SQL comparison before any deployment automation or mi
 - `weekly_reports` exists in live schema.
 - `weekly_reports.trainer_id` is intentionally deferred for a later forward-only hardening migration.
 - `whatsapp_webhook_events.processing_metadata` exists in live schema; `metadata` is not the live column name. No rename was performed.
+- Remote-applied migration `20260708142741_17b_onboarding_prerequisites_and_state_machine` is still not locally represented. Recover the exact remote SQL or otherwise prove equivalence before migration repair or `supabase db push`.
 
 ## Warnings
 
