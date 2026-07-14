@@ -22,7 +22,7 @@ export interface CommunicationLogInput {
 export async function logCommunication(input: CommunicationLogInput): Promise<void> {
   const db = getDb()
 
-  await db.from("communication_logs").insert({
+  const { error } = await db.from("communication_logs").insert({
     trainer_id: input.trainer_id,
     client_id: input.client_id,
     direction: input.direction,
@@ -32,4 +32,8 @@ export async function logCommunication(input: CommunicationLogInput): Promise<vo
     delivery_status: input.delivery_status ?? null,
     metadata: input.metadata ?? {},
   })
+
+  if (error) {
+    throw new Error(`Failed to log ${input.direction.toLowerCase()} communication: ${error.message}`)
+  }
 }
