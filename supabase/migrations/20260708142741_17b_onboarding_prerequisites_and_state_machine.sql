@@ -1,0 +1,21 @@
+-- Migration history representation only.
+--
+-- Remote project: tbwemyizhpozdqnjfqvk
+-- Remote migration version: 20260708142741
+-- Remote migration name: 17b_onboarding_prerequisites_and_state_machine
+--
+-- This migration version is already applied on the linked remote Supabase
+-- project. The exact remote SQL was not recoverable from the local workspace.
+--
+-- Live schema evidence from prior read-only checks confirms the client
+-- onboarding state-machine table and client workout routine timing fields
+-- exist on the remote project.
+--
+-- This file exists to align local migration history with the known remote
+-- migration history. It intentionally contains no executable schema-changing
+-- SQL.
+--
+-- Do not replay local duplicate migration
+-- 20260708195000_17_client_onboarding_state_machine.sql blindly.
+--
+-- Future schema changes must be forward-only.

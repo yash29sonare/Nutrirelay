@@ -101,3 +101,18 @@ These still require manual SQL comparison before any deployment automation or mi
 - Do not run `supabase db push` until remaining drift is resolved.
 - Do not run migration repair until the remaining broad/uncertain migrations are reviewed.
 - Do not treat this as production-grade migration readiness. This is a partial local reconciliation only.
+
+## Final production migration-history alignment
+
+Date: 2026-07-14
+
+- Active migrations in `supabase/migrations` now match the known remote-applied migration history for project `tbwemyizhpozdqnjfqvk`.
+- Remote migration `20260708142741_17b_onboarding_prerequisites_and_state_machine` is represented locally as a documentation-only no-op file because the exact remote SQL was not recoverable from the local workspace.
+- Local-only drift migrations were archived out of the active migration folder into `supabase/MIGRATION_ARCHIVE_UNAPPLIED`.
+- Archived files are preserved for manual SQL comparison and must not be blindly replayed.
+- No live database mutation was performed.
+- `supabase db push` was not run.
+- `supabase migration repair` was not run.
+- `weekly_reports.trainer_id` remains deferred to a future forward-only hardening migration.
+- `whatsapp_webhook_events.processing_metadata` versus `metadata` remains deferred to a future schema-alignment decision.
+- A future deployment-readiness check must verify migration list alignment before any `supabase db push`.
