@@ -19,13 +19,9 @@
  * duplicate ghosting alerts, etc.).
  *
  * WHY EVERY OUTBOUND SENDER WILL DEPEND ON THIS:
- * Currently src/lib/whatsapp/send.ts, src/services/whatsappOutbound.ts,
- * src/services/whatsappMedia.ts, src/trigger/media-consumer.ts, and
- * src/mastra/tools/whatsAppSender.ts all read from process.env. These will be
- * refactored in a subsequent phase to accept credentials returned by this
- * function. This file is the single source of truth for WABA credential
- * resolution — no other code should read WhatsApp credentials from env vars
- * once that refactor is complete.
+ * This file is the single source of truth for WABA credential resolution. Other
+ * WhatsApp senders should receive credentials returned by this function instead
+ * of reading global WhatsApp credentials from environment variables.
  */
 
 import { createClient } from "@supabase/supabase-js"
@@ -71,8 +67,10 @@ export async function getTrainerWaba(
       "phone_number_id, access_token, waba_id, business_account_id, phone_number, status",
     )
     .eq("trainer_id", trainerId)
+    .eq("status", "connected")
+    .order("updated_at", { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
   if (error) {
     throw new Error(
@@ -82,15 +80,8 @@ export async function getTrainerWaba(
 
   if (!data) {
     throw new Error(
-      `[getTrainerWaba] No WABA record found for trainer ${trainerId}. ` +
+      `[getTrainerWaba] No connected WABA record found for trainer ${trainerId}. ` +
       `The trainer must complete WABA connection before the bot can send messages.`,
-    )
-  }
-
-  if (data.status !== "connected") {
-    throw new Error(
-      `[getTrainerWaba] WABA for trainer ${trainerId} is not connected (status: ${data.status}). ` +
-      `Trainer must reconnect their WhatsApp Business Account.`,
     )
   }
 

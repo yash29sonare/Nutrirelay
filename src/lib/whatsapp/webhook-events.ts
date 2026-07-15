@@ -1,4 +1,4 @@
-import { getWhatsAppServiceDb, normalizeWhatsAppPhone, resolveTrainerAndClientByPhone } from "@/lib/whatsapp/service-db";
+import { getWhatsAppServiceDb, normalizeWhatsAppPhone, normalizeWhatsAppPhoneNumberId, resolveInboundWhatsAppTenant } from "@/lib/whatsapp/service-db";
 import type { MetaWebhookPayload } from "@/lib/whatsapp/meta-types";
 
 type SignatureValidation = "skipped" | "passed" | "failed";
@@ -19,6 +19,7 @@ interface WebhookFacts {
   metaEventId: string | null;
   wamId: string | null;
   clientPhone: string | null;
+  receiverPhoneNumberId: string | null;
   eventCategory: "message" | "status" | "unknown";
   eventType: string;
   messageCount: number;
@@ -32,6 +33,7 @@ function getWebhookFacts(payload: unknown): WebhookFacts {
   const value = change?.value;
   const message = value?.messages?.[0];
   const status = value?.statuses?.[0];
+  const receiverPhoneNumberId = normalizeWhatsAppPhoneNumberId(value?.metadata?.phone_number_id);
 
   const messageCount = Array.isArray(value?.messages) ? value.messages.length : 0;
   const statusCount = Array.isArray(value?.statuses) ? value.statuses.length : 0;
@@ -52,6 +54,7 @@ function getWebhookFacts(payload: unknown): WebhookFacts {
       metaEventId: (message?.id as string | undefined) ?? (entry?.id as string | undefined) ?? null,
       wamId,
       clientPhone,
+      receiverPhoneNumberId,
       eventCategory: "message",
       eventType: (message?.type as string | undefined) ?? "unknown",
       messageCount,
@@ -65,6 +68,7 @@ function getWebhookFacts(payload: unknown): WebhookFacts {
       metaEventId: (status?.id as string | undefined) ?? (entry?.id as string | undefined) ?? null,
       wamId,
       clientPhone,
+      receiverPhoneNumberId,
       eventCategory: "status",
       eventType: `status:${statusName}`,
       messageCount,
@@ -76,6 +80,7 @@ function getWebhookFacts(payload: unknown): WebhookFacts {
     metaEventId: (entry?.id as string | undefined) ?? null,
     wamId,
     clientPhone,
+    receiverPhoneNumberId,
     eventCategory: "unknown",
     eventType: "unknown",
     messageCount,
@@ -88,7 +93,10 @@ export async function createWebhookEventRecord(payload: unknown): Promise<{
   facts: WebhookFacts;
 }> {
   const facts = getWebhookFacts(payload);
-  const ownership = await resolveTrainerAndClientByPhone(facts.clientPhone);
+  const ownership = await resolveInboundWhatsAppTenant({
+    receiverPhoneNumberId: facts.receiverPhoneNumberId,
+    senderPhone: facts.clientPhone,
+  });
   const db = getWhatsAppServiceDb();
 
   const { data, error } = await db
@@ -105,6 +113,8 @@ export async function createWebhookEventRecord(payload: unknown): Promise<{
       processing_metadata: {
         message_count: facts.messageCount,
         status_count: facts.statusCount,
+        receiver_phone_number_id: facts.receiverPhoneNumberId,
+        tenant_resolution: ownership.reason,
       },
       payload,
     })

@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { updateWebhookEventRecordsByWamId } from '@/lib/whatsapp/webhook-events'
+import { resolveInboundWhatsAppTenant } from '@/lib/whatsapp/service-db'
 
 interface QueueMessage {
   wam_id: string
+  receiver_phone_number_id?: string | null
   client_phone: string
   message_timestamp: number
   message_type: 'text' | 'audio' | 'image' | 'interactive' | 'unknown'
@@ -42,9 +44,6 @@ function getSupabase() {
 }
 
 async function processMessage(record: PgmqRecord): Promise<ProcessMessageResult> {
-  const supabase = getSupabase()
-  const { msg_id } = record
-
   try {
     const rawMessage = record.message
     const message: QueueMessage =
@@ -56,6 +55,7 @@ async function processMessage(record: PgmqRecord): Promise<ProcessMessageResult>
     }
 
     const {
+      receiver_phone_number_id,
       client_phone,
       message_timestamp,
       message_type,
@@ -64,29 +64,18 @@ async function processMessage(record: PgmqRecord): Promise<ProcessMessageResult>
       button_reply_id,
     } = message
 
-    const { data: profileRow } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('phone_number', client_phone)
-      .limit(1)
-      .single()
-
-    const clientId = (profileRow as { id: string } | null)?.id ?? null
-
-    let trainerId: string | null = null
-    if (clientId) {
-      const { data: tcRow } = await supabase
-        .from('trainer_clients')
-        .select('trainer_id')
-        .eq('client_id', clientId)
-        .eq('is_active', true)
-        .limit(1)
-        .single()
-      trainerId = (tcRow as { trainer_id: string } | null)?.trainer_id ?? null
-    }
+    const tenant = await resolveInboundWhatsAppTenant({
+      receiverPhoneNumberId: receiver_phone_number_id,
+      senderPhone: client_phone,
+    })
+    const clientId = tenant.clientId
+    const trainerId = tenant.trainerId
 
     if (!trainerId) {
-      return { status: "FAILURE_HANDLED", wam_id, eventStatus: "failed_handled", error: "no active trainer" }
+      return { status: "FAILURE_HANDLED", wam_id, eventStatus: "failed_handled", error: tenant.reason }
+    }
+    if (!clientId) {
+      return { status: "FAILURE_HANDLED", wam_id, eventStatus: "failed_handled", error: tenant.reason }
     }
 
     try {

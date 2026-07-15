@@ -49,6 +49,10 @@ export interface MetaWebhookStatus {
 }
 
 export interface MetaWebhookValue {
+  metadata?: {
+    display_phone_number?: string;
+    phone_number_id?: string;
+  };
   messages?: MetaWebhookMessage[];
   statuses?: MetaWebhookStatus[];
 }

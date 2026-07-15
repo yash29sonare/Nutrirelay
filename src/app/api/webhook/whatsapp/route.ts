@@ -151,6 +151,7 @@ export async function POST(req: Request): Promise<Response> {
     // ── 5. Build queue envelope ─────────────────────────────────────────────
     const envelope = {
       wam_id: parsed.whatsapp_message_id,
+      receiver_phone_number_id: firstValue?.metadata?.phone_number_id ?? null,
       client_phone: parsed.from,
       message_timestamp: parsed.timestamp,
       message_type: parsed.type,
@@ -205,6 +206,7 @@ export async function POST(req: Request): Promise<Response> {
         latest_status: statusResult.latestStatus,
         queue_name: "whatsapp_incoming_queue",
         wam_id: envelope.wam_id,
+        receiver_phone_number_id: envelope.receiver_phone_number_id,
       },
     });
 

@@ -1,4 +1,4 @@
-import { getWhatsAppServiceDb, normalizeWhatsAppPhone, resolveTrainerAndClientByPhone } from "@/lib/whatsapp/service-db";
+import { getWhatsAppServiceDb, normalizeWhatsAppPhone, normalizeWhatsAppPhoneNumberId, resolveInboundWhatsAppTenant } from "@/lib/whatsapp/service-db";
 import type { MetaWebhookPayload } from "@/lib/whatsapp/meta-types";
 
 function parseMetaTimestamp(raw: string | null | undefined): string | null {
@@ -15,24 +15,29 @@ export async function persistWhatsAppStatuses(payload: unknown): Promise<{
   latestStatus: string | null;
 }> {
   const parsed = payload as MetaWebhookPayload;
-  const statuses = parsed.entry?.[0]?.changes?.[0]?.value?.statuses;
+  const value = parsed.entry?.[0]?.changes?.[0]?.value;
+  const statuses = value?.statuses;
   if (!Array.isArray(statuses) || statuses.length === 0) {
     return { count: 0, latestStatus: null };
   }
 
   const db = getWhatsAppServiceDb();
-  const ownershipCache = new Map<string, Awaited<ReturnType<typeof resolveTrainerAndClientByPhone>>>();
+  const receiverPhoneNumberId = normalizeWhatsAppPhoneNumberId(value?.metadata?.phone_number_id);
+  const ownershipCache = new Map<string, Awaited<ReturnType<typeof resolveInboundWhatsAppTenant>>>();
   const rows: Record<string, unknown>[] = [];
   let latestStatus: string | null = null;
 
   for (const status of statuses) {
     const rawRecipient = (status?.recipient_id as string | undefined) ?? null;
     const clientPhone = normalizeWhatsAppPhone(rawRecipient);
-    const cacheKey = clientPhone ?? "__missing__";
+    const cacheKey = `${receiverPhoneNumberId ?? "__missing_receiver__"}:${clientPhone ?? "__missing_sender__"}`;
 
     let ownership = ownershipCache.get(cacheKey);
     if (!ownership) {
-      ownership = await resolveTrainerAndClientByPhone(clientPhone);
+      ownership = await resolveInboundWhatsAppTenant({
+        receiverPhoneNumberId,
+        senderPhone: clientPhone,
+      });
       ownershipCache.set(cacheKey, ownership);
     }
 
@@ -75,15 +80,16 @@ export async function persistWhatsAppStatuses(payload: unknown): Promise<{
   }
 
   for (const row of validRows) {
+    if (typeof row.trainer_id !== "string" || row.trainer_id.length === 0) {
+      continue;
+    }
+
     let query = db
       .from("communication_logs")
       .update({ delivery_status: row.status as string })
       .eq("wam_id", row.wam_id as string)
-      .eq("direction", "OUTBOUND");
-
-    if (typeof row.trainer_id === "string" && row.trainer_id.length > 0) {
-      query = query.eq("trainer_id", row.trainer_id);
-    }
+      .eq("direction", "OUTBOUND")
+      .eq("trainer_id", row.trainer_id);
 
     const { error: updateError } = await query;
 

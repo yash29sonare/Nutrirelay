@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServiceDb } from "@/lib/ownership"
-import { requireTrainer, unauthorized } from "@/lib/api-auth"
+import { requireTrainerContext, unauthorized } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -9,13 +9,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
   const limit = parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10)
 
   try {
-    const trainerId = await requireTrainer()
+    const { authUserId } = await requireTrainerContext()
     const db = createServiceDb()
 
     const { data: tc } = await db
       .from("trainer_clients")
       .select("client_id")
-      .eq("trainer_id", trainerId)
+      .eq("trainer_id", authUserId)
       .eq("client_id", clientId)
       .limit(1)
       .maybeSingle()
@@ -25,6 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
     const { data } = await db
       .from("communication_logs")
       .select("id, direction, message_type, message_timestamp, delivery_status, metadata, created_at")
+      .eq("trainer_id", authUserId)
       .eq("client_id", clientId)
       .order("message_timestamp", { ascending: false })
       .limit(limit)
