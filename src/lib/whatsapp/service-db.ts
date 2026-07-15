@@ -85,12 +85,31 @@ export async function resolveInboundWhatsAppTenant(input: {
     };
   }
 
+  const { data: profileRows } = await db
+    .from("profiles")
+    .select("id")
+    .eq("phone_number", clientPhone);
+
+  const candidateClientIds = ((profileRows as Array<{ id: string }> | null) ?? [])
+    .map((profile) => profile.id)
+    .filter((id) => id.length > 0);
+
+  if (candidateClientIds.length === 0) {
+    return {
+      credential: credentialRow,
+      trainerId: credentialRow.trainer_id,
+      clientId: null,
+      clientPhone,
+      reason: "unknown_sender",
+    };
+  }
+
   const { data: match } = await db
     .from("trainer_clients")
-    .select("client_id, profiles!inner(phone_number)")
+    .select("client_id")
     .eq("trainer_id", credentialRow.trainer_id)
     .eq("is_active", true)
-    .eq("profiles.phone_number", clientPhone)
+    .in("client_id", candidateClientIds)
     .limit(1)
     .maybeSingle();
 
