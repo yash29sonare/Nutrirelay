@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Card, CardContent, CardHeader } from "@/components/ui/Card"
+import { Card, CardContent } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Avatar } from "@/components/ui/Avatar"
 import { DashboardSection } from "@/components/layout/DashboardSection"
@@ -8,14 +8,13 @@ import { EmptyState } from "@/components/ui/EmptyState"
 import { ErrorState } from "@/components/ui/ErrorState"
 import { InlineNotice } from "@/components/ui/InlineNotice"
 import {
-  ArrowLeft, AlertTriangle, CalendarClock, Dumbbell, Goal, ImageIcon, UtensilsCrossed,
+  ArrowLeft, AlertTriangle, CalendarClock, Dumbbell, Goal, History,
 } from "lucide-react"
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getClientById } from "@/lib/operations/clients"
 import {
   getClientRiskLevel,
   getComplianceState,
-  getPerformanceTrend,
 } from "@/lib/domain/dashboardSemantics"
 import { createClient } from "@/utils/supabase/server"
 import { getClientEvents } from "@/lib/events/engagementEventStore"
@@ -26,9 +25,11 @@ import { getTrainerProfile } from "@/lib/operations/trainer"
 import { getClientDetail } from "@/lib/dashboard-reads"
 import type { ClientSummary } from "@/types/dashboard"
 import type { MealRecord } from "@/types/meal"
+import type { TimelineEntry } from "@/types/timeline"
 import { ClientTimeline } from "./components/ClientTimeline"
 import { MealHistory } from "./components/MealHistory"
 import { formatDate, formatNumber } from "@/lib/format"
+import { buildTimeline } from "@/lib/timeline/timelineEngine"
 
 function MacroBar({
   label,
@@ -76,38 +77,17 @@ function formatMediaKind(kind: string | null) {
   }
 }
 
-function normalizeMealText(meal: MealRecord): string {
-  return (meal.sourceText ?? meal.notes ?? meal.mealType)
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim()
+function isDisplayablePhoto(item: { media_kind: string | null; media_url: string | null }) {
+  return Boolean(item.media_url) && (item.media_kind === "food_photo" || item.media_kind === "progress_photo")
 }
 
-function groupSimilarMeals(meals: MealRecord[]): Array<MealRecord & { duplicateCount?: number }> {
-  const grouped = new Map<string, MealRecord & { duplicateCount?: number }>()
-
-  for (const meal of meals) {
-    const key = [
-      normalizeMealText(meal),
-      meal.calories,
-      meal.proteinG,
-      meal.carbsG,
-      meal.fatG,
-      meal.sourceType ?? "unknown",
-      meal.review.status,
-      meal.attachment ? "image" : "no-image",
-    ].join("|")
-
-    const existing = grouped.get(key)
-    if (existing) {
-      existing.duplicateCount = (existing.duplicateCount ?? 1) + 1
-      continue
-    }
-
-    grouped.set(key, { ...meal, duplicateCount: 1 })
+function groupMediaByDate<T extends { message_timestamp: string }>(items: T[]) {
+  const groups = new Map<string, T[]>()
+  for (const item of items) {
+    const key = item.message_timestamp.slice(0, 10)
+    groups.set(key, [...(groups.get(key) ?? []), item])
   }
-
-  return [...grouped.values()]
+  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a))
 }
 
 function sumMeals(meals: MealRecord[]) {
@@ -140,6 +120,36 @@ function computeBmi(health: Record<string, any> | null): string | null {
   const heightM = heightCm / 100
   const bmi = weightKg / (heightM * heightM)
   return Number.isFinite(bmi) ? bmi.toFixed(1) : null
+}
+
+function ActivityPreview({ entries }: { entries: TimelineEntry[] }) {
+  return (
+    <Card>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface-overlay)]">
+            <History size={15} className="text-[var(--foreground)]" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[var(--foreground)]">Latest activity</p>
+            <p className="text-xs text-[var(--muted)]">Last client updates</p>
+          </div>
+        </div>
+        {entries.length > 0 ? (
+          <div className="space-y-2">
+            {entries.slice(0, 2).map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-2">
+                <p className="text-sm font-medium text-[var(--foreground)]">{entry.title}</p>
+                <p className="mt-0.5 line-clamp-1 text-xs text-[var(--muted)]">{entry.description}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--muted)]">No recent activity yet.</p>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export default async function ClientDetailPage({
@@ -221,7 +231,6 @@ export default async function ClientDetailPage({
 
   const riskLevel = getClientRiskLevel(client)
   const compliance = getComplianceState(dto.metrics)
-  const trend = getPerformanceTrend(dto.metrics)
 
   const TARGETS = { calories: 2200, protein: 160, carbs: 220, fat: 70 }
 
@@ -230,14 +239,9 @@ export default async function ClientDetailPage({
   const stateEntries = mapClientState(client)
   const meals = await getClientMeals(id, { limit: 40 })
   const todayMeals = await getClientMealsForDay(id)
-  const displayedMeals = groupSimilarMeals(meals).slice(0, 12)
-  const latestMeals = displayedMeals.slice(0, 6)
+  const latestMeals = meals.slice(0, 6)
   const mealEntries = mapMealRecordsToTimelineEntries(latestMeals)
   const todayMacros = sumMeals(todayMeals)
-
-  const needsReview = meals.find(
-    (m) => m.review.status === "recorded" || m.review.status === "pending",
-  )
 
   const unverifiedMeals = meals.filter(
     (m) => m.review.status === "unverified",
@@ -247,9 +251,12 @@ export default async function ClientDetailPage({
   const health = clientDetail?.health ?? null
   const onboarding = clientDetail?.onboarding ?? null
   const workout = clientDetail?.workout ?? null
-  const latestMedia = clientDetail?.media?.slice(0, 4) ?? []
-  const latestStructuredResponse = clientDetail?.latestStructuredResponse ?? null
+  const latestPhotoMedia = (clientDetail?.media ?? [])
+    .filter(isDisplayablePhoto)
+    .slice(0, 8)
+  const mediaByDate = groupMediaByDate(latestPhotoMedia)
   const bmi = computeBmi(health)
+  const latestActivityEntries = buildTimeline([eventEntries, stateEntries, mealEntries]).slice(0, 2)
 
   return (
     <PageContainer>
@@ -313,64 +320,76 @@ export default async function ClientDetailPage({
           </InlineNotice>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
-          <DashboardSection title="Client Media" description="Latest inbound WhatsApp photos for this client">
-            {latestMedia.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {latestMedia.map((item) => (
-                  <Card key={item.id}>
-                    <CardContent className="space-y-3 p-3">
-                      <div className="aspect-[4/3] overflow-hidden rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]">
-                        {item.media_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={item.media_url}
-                            alt={formatMediaKind(item.media_kind)}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-[var(--muted)]">
-                            <ImageIcon size={20} />
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant={
-                              item.media_kind === "food_photo"
-                                ? "success"
-                                : item.media_kind === "progress_photo"
-                                  ? "info"
-                                  : "outline"
-                            }
-                          >
-                            {formatMediaKind(item.media_kind)}
-                          </Badge>
-                          <span className="text-[10px] text-[var(--muted)]">
-                            {new Date(item.message_timestamp).toLocaleString()}
-                          </span>
-                        </div>
-                        {item.caption ? (
-                          <p className="line-clamp-2 text-xs text-[var(--muted)]">{item.caption}</p>
-                        ) : null}
-                        {item.wam_id ? (
-                          <p className="truncate text-[10px] text-[var(--muted)]">WhatsApp id: {item.wam_id}</p>
-                        ) : null}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.7fr)]">
+          <Card>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--surface-overlay)]">
+                  <CalendarClock size={16} className="text-[var(--foreground)]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">Client profile</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {onboarding?.status?.replace(/_/g, " ") ?? "Not started"} · Step: {onboarding?.current_step?.replace(/_/g, " ") ?? "height"}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <Card>
-                <CardContent className="py-6">
-                  <EmptyState title="No client media yet" description="Inbound WhatsApp images will appear here after processing." />
-                </CardContent>
-              </Card>
-            )}
-          </DashboardSection>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-[var(--muted)]">Height</p>
+                  <p className="font-medium text-[var(--foreground)]">{valueText(health, "height_cm")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--muted)]">Weight</p>
+                  <p className="font-medium text-[var(--foreground)]">{valueText(health, "weight_kg")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--muted)]">BMI</p>
+                  <p className="font-medium text-[var(--foreground)]">{bmi ?? "Not enough data"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--muted)]">Missing</p>
+                  <p className="font-medium text-[var(--foreground)]">
+                    {onboarding?.missing_fields?.length ? onboarding.missing_fields.join(", ") : "None"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--info)]/10">
+                  <Goal size={16} className="text-[var(--info)]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">Goal summary</p>
+                  <p className="text-xs text-[var(--muted)]">{formatGoalType(activeGoal?.goal_type)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-[var(--muted)]">Starting</p>
+                  <p className="font-medium text-[var(--foreground)]">{valueText(activeGoal, "starting_weight")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--muted)]">Current</p>
+                  <p className="font-medium text-[var(--foreground)]">{valueText(activeGoal, "current_weight")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--muted)]">Target</p>
+                  <p className="font-medium text-[var(--foreground)]">{valueText(activeGoal, "target_weight")}</p>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--muted)]">Target date: {valueText(activeGoal, "target_date")}</p>
+            </CardContent>
+          </Card>
+
+          <ActivityPreview entries={latestActivityEntries} />
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
           <DashboardSection title="Today's Macros" description={`${todayMeals.length} logged intake event${todayMeals.length !== 1 ? "s" : ""} for ${formatDate(new Date())}`}>
             <Card>
               <CardContent className="space-y-4">
@@ -401,162 +420,56 @@ export default async function ClientDetailPage({
               </CardContent>
             </Card>
           </DashboardSection>
+
+          <DashboardSection title="Client Photos" description="Inbound WhatsApp photos grouped by date">
+            {mediaByDate.length > 0 ? (
+              <div className="space-y-5">
+                {mediaByDate.map(([dateKey, items]) => (
+                  <div key={dateKey} className="space-y-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{formatDate(dateKey)}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {items.map((item) => (
+                        <Card key={item.id}>
+                          <CardContent className="space-y-3 p-3">
+                            <div className="aspect-[4/3] overflow-hidden rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={item.media_url!}
+                                alt={formatMediaKind(item.media_kind)}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={item.media_kind === "food_photo" ? "success" : "info"}>
+                                  {formatMediaKind(item.media_kind)}
+                                </Badge>
+                                <span className="text-[10px] text-[var(--muted)]">
+                                  {new Date(item.message_timestamp).toLocaleString()}
+                                </span>
+                              </div>
+                              {item.caption ? (
+                                <p className="line-clamp-2 text-xs text-[var(--muted)]">{item.caption}</p>
+                              ) : null}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="py-6">
+                  <EmptyState title="No photos" description="Photos will appear here only after this client sends an image on WhatsApp." />
+                </CardContent>
+              </Card>
+            )}
+          </DashboardSection>
         </div>
 
-        <DashboardSection title="Latest Structured Reply" description="Most recent WhatsApp structured response from this client">
-          <Card>
-            <CardContent className="space-y-3 py-5">
-              {latestStructuredResponse ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="info">
-                      {latestStructuredResponse.interactive_type ?? "structured_reply"}
-                    </Badge>
-                    <span className="text-xs text-[var(--muted)]">
-                      {new Date(latestStructuredResponse.message_timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                  <div>
-                    {latestStructuredResponse.prompt ? (
-                      <p className="text-xs text-[var(--muted)]">
-                        Prompt: {latestStructuredResponse.prompt}
-                      </p>
-                    ) : null}
-                    <p className="text-sm font-semibold text-[var(--foreground)]">
-                      {latestStructuredResponse.selected_option ?? latestStructuredResponse.reply_label ?? "Structured reply received"}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {latestStructuredResponse.adherence_status ? (
-                        <Badge variant={latestStructuredResponse.needs_review ? "warning" : "success"}>
-                          {latestStructuredResponse.adherence_status.replace(/_/g, " ")}
-                        </Badge>
-                      ) : null}
-                      {latestStructuredResponse.automation_state ? (
-                        <Badge variant="outline">
-                          {latestStructuredResponse.automation_state.replace(/_/g, " ")}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--muted)]">
-                      Reply ID: {latestStructuredResponse.reply_id ?? "Not available"}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--muted)] break-all">
-                      Prompt WAM ID: {latestStructuredResponse.context_wam_id ?? "Not available"}
-                    </p>
-                    {latestStructuredResponse.follow_up_message ? (
-                      <p className="mt-2 text-xs text-[var(--muted)]">
-                        Follow-up: {latestStructuredResponse.follow_up_message}
-                      </p>
-                    ) : null}
-                  </div>
-                </>
-              ) : (
-                <EmptyState
-                  title="No structured replies yet"
-                  description="Interactive WhatsApp selections will appear here after inbound processing succeeds."
-                />
-              )}
-            </CardContent>
-          </Card>
-        </DashboardSection>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DashboardSection title="Onboarding" description="WhatsApp setup progress for this client">
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--surface-overlay)]">
-                    <CalendarClock size={16} className="text-[var(--foreground)]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--foreground)]">
-                      {onboarding?.status?.replace(/_/g, " ") ?? "Not started"}
-                    </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      Current step: {onboarding?.current_step?.replace(/_/g, " ") ?? "height"}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Height</p>
-                    <p className="font-medium text-[var(--foreground)]">{valueText(health, "height_cm")}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Current weight</p>
-                    <p className="font-medium text-[var(--foreground)]">{valueText(health, "weight_kg")}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">BMI</p>
-                    <p className="font-medium text-[var(--foreground)]">{bmi ?? "Not enough data"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Missing</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {onboarding?.missing_fields?.length ? onboarding.missing_fields.join(", ") : "None"}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Allergies</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {Array.isArray(health?.allergies) && health.allergies.length > 0 ? health.allergies.join(", ") : "None"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Preference</p>
-                    <p className="font-medium text-[var(--foreground)]">{valueText(health, "diet_type")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </DashboardSection>
-
-          <DashboardSection title="Goal Summary" description="Current nutrition target">
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--info)]/10">
-                    <Goal size={16} className="text-[var(--info)]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--foreground)]">{formatGoalType(activeGoal?.goal_type)}</p>
-                    <p className="text-xs text-[var(--muted)]">Target date: {valueText(activeGoal, "target_date")}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Starting</p>
-                    <p className="font-medium text-[var(--foreground)]">{valueText(activeGoal, "starting_weight")}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Current</p>
-                    <p className="font-medium text-[var(--foreground)]">{valueText(activeGoal, "current_weight")}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Target</p>
-                    <p className="font-medium text-[var(--foreground)]">{valueText(activeGoal, "target_weight")}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Allergies</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {Array.isArray(health?.allergies) && health.allergies.length > 0 ? health.allergies.join(", ") : "None"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Dislikes</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {Array.isArray(health?.food_restrictions) && health.food_restrictions.length > 0 ? health.food_restrictions.join(", ") : "Not set"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </DashboardSection>
-
           <DashboardSection title="Workout Routine" description="Timing used by WhatsApp reminder logic">
             <Card>
               <CardContent className="space-y-4">
@@ -607,11 +520,11 @@ export default async function ClientDetailPage({
           </DashboardSection>
         </div>
 
-        <DashboardSection title="Latest Logged Intake" description="Grouped by matching food text, source, macros, and review state">
+        <DashboardSection title="Latest Logged Intake" description="Review intake by week, then by day. Dates are shown above the table.">
           <MealHistory
-            meals={displayedMeals}
+            meals={meals}
             title="Logged intake"
-            description="Repeated identical rows are grouped on this page; source rows remain unchanged in food_logs."
+            description="Use the week menu and date chips to review one day at a time."
             enableReviewActions
           />
         </DashboardSection>
