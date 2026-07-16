@@ -434,13 +434,17 @@ export async function getClientWhatsAppConversation(
 
   if (!tc) return []
 
-  const { data: communications } = await db
+  const { data: communications, error: communicationsError } = await db
     .from("communication_logs")
     .select("id, direction, message_type, wam_id, message_timestamp, delivery_status, metadata, created_at")
     .eq("trainer_id", trainerId)
     .eq("client_id", clientId)
     .order("message_timestamp", { ascending: false })
     .limit(limit)
+
+  if (communicationsError) {
+    throw new Error("Failed to load WhatsApp communication history")
+  }
 
   const rows = (communications ?? []) as Array<{
     id: string
@@ -470,6 +474,13 @@ export async function getClientWhatsAppConversation(
           .in("wam_id", wamIds),
       ])
     : [{ data: [] }, { data: [] }]
+
+  if ("error" in statusRes && statusRes.error) {
+    throw new Error("Failed to load WhatsApp message statuses")
+  }
+  if ("error" in foodRes && foodRes.error) {
+    throw new Error("Failed to load WhatsApp food-log context")
+  }
 
   const statusesByWamId = new Map<string, ClientWhatsAppStatus[]>()
   for (const row of (statusRes.data ?? []) as Array<{

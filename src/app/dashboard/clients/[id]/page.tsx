@@ -176,12 +176,14 @@ function messageTypeLabel(message: ClientWhatsAppMessage) {
   return message.message_type
 }
 
-function WhatsAppConversation({ messages }: { messages: ClientWhatsAppMessage[] }) {
+function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMessage[]; error: string | null }) {
   return (
     <DashboardSection title="WhatsApp Conversation" description="Saved message history and delivery status for this client">
       <Card>
         <CardContent className="space-y-4">
-          {messages.length > 0 ? (
+          {error ? (
+            <ErrorState title={error} />
+          ) : messages.length > 0 ? (
             <div className="space-y-3">
               {messages.map((message) => (
                 <div
@@ -347,7 +349,13 @@ export default async function ClientDetailPage({
   const stateEntries = mapClientState(client)
   const meals = await getClientMeals(id, { limit: 40 })
   const todayMeals = await getClientMealsForDay(id)
-  const whatsappMessages = await getClientWhatsAppConversation(id, authUserId, 20)
+  let whatsappMessages: ClientWhatsAppMessage[] = []
+  let whatsappConversationError: string | null = null
+  try {
+    whatsappMessages = await getClientWhatsAppConversation(id, authUserId, 20)
+  } catch {
+    whatsappConversationError = "WhatsApp conversation history could not be loaded."
+  }
   const latestMeals = meals.slice(0, 6)
   const mealEntries = mapMealRecordsToTimelineEntries(latestMeals)
   const todayMacros = sumMeals(todayMeals)
@@ -638,7 +646,7 @@ export default async function ClientDetailPage({
           />
         </DashboardSection>
 
-        <WhatsAppConversation messages={whatsappMessages} />
+        <WhatsAppConversation messages={whatsappMessages} error={whatsappConversationError} />
 
         <DashboardSection title="Latest Activity">
           <ClientTimeline sources={[eventEntries, stateEntries, mealEntries]} />
