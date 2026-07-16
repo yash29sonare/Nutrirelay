@@ -64,6 +64,35 @@ export interface ClientDetail {
   } | null
 }
 
+export interface ClientWhatsAppStatus {
+  status: string
+  timestamp: string | null
+  error: string | null
+}
+
+export interface ClientWhatsAppFoodContext {
+  id: string
+  notes: string | null
+  calories: number | null
+  protein_g: number | null
+  carbs_g: number | null
+  fat_g: number | null
+  review_state: string | null
+}
+
+export interface ClientWhatsAppMessage {
+  id: string
+  direction: string
+  message_type: string
+  message_timestamp: string
+  wam_id: string | null
+  delivery_status: string | null
+  display_text: string
+  latest_status: string
+  status_history: ClientWhatsAppStatus[]
+  food_log: ClientWhatsAppFoodContext | null
+}
+
 export interface DailyNutrition {
   date: string
   calories: number
@@ -71,6 +100,28 @@ export interface DailyNutrition {
   carbs_g: number
   fat_g: number
   meal_count: number
+}
+
+function readMetadataText(metadata: Record<string, any> | null, messageType: string, direction: string): string {
+  if (typeof metadata?.original_text === "string" && metadata.original_text.trim()) {
+    return metadata.original_text
+  }
+  if (typeof metadata?.message_preview === "string" && metadata.message_preview.trim()) {
+    return metadata.message_preview
+  }
+  if (typeof metadata?.template_id === "string" && metadata.template_id.trim()) {
+    return `Template: ${metadata.template_id}`
+  }
+  if (messageType === "TEMPLATE") return "Template message"
+  return direction === "INBOUND" ? "Inbound WhatsApp message" : "Outbound WhatsApp message"
+}
+
+function statusTimestamp(row: {
+  meta_status_timestamp: string | null
+  received_at: string | null
+  created_at: string | null
+}) {
+  return row.meta_status_timestamp ?? row.received_at ?? row.created_at
 }
 
 export interface WeeklyNutrition {
@@ -363,6 +414,125 @@ export async function getClientDetail(clientId: string, trainerId: string): Prom
       }
     })(),
   }
+}
+
+export async function getClientWhatsAppConversation(
+  clientId: string,
+  trainerId: string,
+  limit = 20,
+): Promise<ClientWhatsAppMessage[]> {
+  const db = getDb()
+
+  const { data: tc } = await db
+    .from("trainer_clients")
+    .select("client_id")
+    .eq("client_id", clientId)
+    .eq("trainer_id", trainerId)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle()
+
+  if (!tc) return []
+
+  const { data: communications } = await db
+    .from("communication_logs")
+    .select("id, direction, message_type, wam_id, message_timestamp, delivery_status, metadata, created_at")
+    .eq("trainer_id", trainerId)
+    .eq("client_id", clientId)
+    .order("message_timestamp", { ascending: false })
+    .limit(limit)
+
+  const rows = (communications ?? []) as Array<{
+    id: string
+    direction: string
+    message_type: string
+    wam_id: string | null
+    message_timestamp: string
+    delivery_status: string | null
+    metadata: Record<string, any> | null
+    created_at: string
+  }>
+
+  const wamIds = rows.map((row) => row.wam_id).filter((wamId): wamId is string => Boolean(wamId))
+  const [statusRes, foodRes] = wamIds.length > 0
+    ? await Promise.all([
+        db
+          .from("whatsapp_message_statuses")
+          .select("wam_id, status, meta_status_timestamp, received_at, created_at, error_payload")
+          .eq("trainer_id", trainerId)
+          .in("wam_id", wamIds)
+          .order("meta_status_timestamp", { ascending: true, nullsFirst: false }),
+        db
+          .from("food_logs")
+          .select("id, wam_id, notes, calories, protein_g, carbs_g, fat_g, review_state")
+          .eq("trainer_id", trainerId)
+          .eq("client_id", clientId)
+          .in("wam_id", wamIds),
+      ])
+    : [{ data: [] }, { data: [] }]
+
+  const statusesByWamId = new Map<string, ClientWhatsAppStatus[]>()
+  for (const row of (statusRes.data ?? []) as Array<{
+    wam_id: string
+    status: string
+    meta_status_timestamp: string | null
+    received_at: string | null
+    created_at: string | null
+    error_payload: Record<string, any> | null
+  }>) {
+    const error = row.error_payload
+      ? JSON.stringify(row.error_payload).slice(0, 180)
+      : null
+    const status: ClientWhatsAppStatus = {
+      status: row.status,
+      timestamp: statusTimestamp(row),
+      error,
+    }
+    statusesByWamId.set(row.wam_id, [...(statusesByWamId.get(row.wam_id) ?? []), status])
+  }
+
+  const foodByWamId = new Map<string, ClientWhatsAppFoodContext>()
+  for (const row of (foodRes.data ?? []) as Array<{
+    id: string
+    wam_id: string | null
+    notes: string | null
+    calories: number | string | null
+    protein_g: number | string | null
+    carbs_g: number | string | null
+    fat_g: number | string | null
+    review_state: string | null
+  }>) {
+    if (!row.wam_id) continue
+    foodByWamId.set(row.wam_id, {
+      id: row.id,
+      notes: row.notes,
+      calories: row.calories === null ? null : Number(row.calories),
+      protein_g: row.protein_g === null ? null : Number(row.protein_g),
+      carbs_g: row.carbs_g === null ? null : Number(row.carbs_g),
+      fat_g: row.fat_g === null ? null : Number(row.fat_g),
+      review_state: row.review_state,
+    })
+  }
+
+  return rows.map((row) => {
+    const statusHistory = row.wam_id ? statusesByWamId.get(row.wam_id) ?? [] : []
+    const latestStatus = statusHistory.at(-1)?.status
+      ?? row.delivery_status
+      ?? (row.direction === "INBOUND" ? "received" : "unknown")
+
+    return {
+      id: row.id,
+      direction: row.direction,
+      message_type: row.message_type,
+      message_timestamp: row.message_timestamp,
+      wam_id: row.wam_id,
+      delivery_status: row.delivery_status,
+      display_text: readMetadataText(row.metadata, row.message_type, row.direction),
+      latest_status: latestStatus,
+      status_history: statusHistory,
+      food_log: row.wam_id ? foodByWamId.get(row.wam_id) ?? null : null,
+    }
+  })
 }
 
 export async function getDailyNutrition(clientId: string, date: string, trainerId?: string): Promise<DailyNutrition[]> {

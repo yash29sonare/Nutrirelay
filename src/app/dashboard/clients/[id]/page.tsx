@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState"
 import { ErrorState } from "@/components/ui/ErrorState"
 import { InlineNotice } from "@/components/ui/InlineNotice"
 import {
-  ArrowLeft, AlertTriangle, CalendarClock, Dumbbell, Goal, History,
+  ArrowLeft, AlertTriangle, CalendarClock, CheckCheck, Dumbbell, Goal, History, MessageSquare,
 } from "lucide-react"
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getClientById } from "@/lib/operations/clients"
@@ -22,13 +22,13 @@ import { mapEngagementEvents, mapClientState } from "@/lib/timeline/timelineMapp
 import { getClientMeals, getClientMealsForDay } from "@/lib/meals/mealOperations"
 import { mapMealRecordsToTimelineEntries } from "@/lib/meals/mealTimelineMapper"
 import { getTrainerProfile } from "@/lib/operations/trainer"
-import { getClientDetail } from "@/lib/dashboard-reads"
+import { getClientDetail, getClientWhatsAppConversation, type ClientWhatsAppMessage } from "@/lib/dashboard-reads"
 import type { ClientSummary } from "@/types/dashboard"
 import type { MealRecord } from "@/types/meal"
 import type { TimelineEntry } from "@/types/timeline"
 import { ClientTimeline } from "./components/ClientTimeline"
 import { MealHistory } from "./components/MealHistory"
-import { formatDate, formatNumber } from "@/lib/format"
+import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
 import { buildTimeline } from "@/lib/timeline/timelineEngine"
 
 function MacroBar({
@@ -152,6 +152,114 @@ function ActivityPreview({ entries }: { entries: TimelineEntry[] }) {
   )
 }
 
+function statusVariant(status: string): "success" | "warning" | "danger" | "info" | "outline" {
+  switch (status.toLowerCase()) {
+    case "read":
+    case "delivered":
+    case "sent":
+    case "received":
+      return "success"
+    case "queued":
+    case "unknown":
+      return "outline"
+    case "failed":
+      return "danger"
+    default:
+      return "info"
+  }
+}
+
+function messageTypeLabel(message: ClientWhatsAppMessage) {
+  if (message.direction === "OUTBOUND" && message.message_type === "TEXT" && message.display_text.startsWith("Logged:")) {
+    return "AUTO_REPLY"
+  }
+  return message.message_type
+}
+
+function WhatsAppConversation({ messages }: { messages: ClientWhatsAppMessage[] }) {
+  return (
+    <DashboardSection title="WhatsApp Conversation" description="Saved message history and delivery status for this client">
+      <Card>
+        <CardContent className="space-y-4">
+          {messages.length > 0 ? (
+            <div className="space-y-3">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-overlay)] p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={message.direction === "INBOUND" ? "info" : "outline"}>
+                        {message.direction}
+                      </Badge>
+                      <Badge variant="outline">{messageTypeLabel(message)}</Badge>
+                      <Badge variant={statusVariant(message.latest_status)}>
+                        {message.latest_status}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-[var(--muted)]">
+                      {formatDateTime(message.message_timestamp)}
+                    </span>
+                  </div>
+
+                  <p className="mt-3 text-sm leading-6 text-[var(--foreground)]">
+                    {message.display_text}
+                  </p>
+
+                  {message.food_log ? (
+                    <div className="mt-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-card)] px-3 py-2 text-xs text-[var(--muted)]">
+                      <div className="flex flex-wrap items-center gap-2 text-[var(--foreground)]">
+                        <MessageSquare size={13} />
+                        <span className="font-medium">Linked food log</span>
+                        <Badge variant="outline">{message.food_log.review_state ?? "review_state unknown"}</Badge>
+                      </div>
+                      <p className="mt-1">
+                        {message.food_log.notes ?? "Food log created from this WhatsApp message"}
+                      </p>
+                      <p className="mt-1 tabular-nums">
+                        {formatNumber(message.food_log.calories ?? 0)} kcal · P {formatNumber(message.food_log.protein_g ?? 0)}g · C {formatNumber(message.food_log.carbs_g ?? 0)}g · F {formatNumber(message.food_log.fat_g ?? 0)}g
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {message.status_history.length > 0 ? (
+                    <details className="mt-3 text-xs text-[var(--muted)]">
+                      <summary className="inline-flex cursor-pointer items-center gap-1 text-[var(--muted)] hover:text-[var(--foreground)]">
+                        <CheckCheck size={13} />
+                        Status history
+                      </summary>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {message.status_history.map((status) => (
+                          <Badge key={`${message.id}-${status.status}-${status.timestamp ?? "no-time"}`} variant={statusVariant(status.status)}>
+                            {status.status}{status.timestamp ? ` · ${formatDateTime(status.timestamp)}` : ""}
+                          </Badge>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+
+                  {message.wam_id ? (
+                    <details className="mt-2 text-xs text-[var(--muted)]">
+                      <summary className="cursor-pointer hover:text-[var(--foreground)]">Provider id</summary>
+                      <p className="mt-1 break-all font-mono text-[10px]">{message.wam_id}</p>
+                    </details>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No WhatsApp messages yet"
+              description="Outbound templates, client replies, delivery status, and food-log context will appear here after messages are saved."
+            />
+          )}
+        </CardContent>
+      </Card>
+    </DashboardSection>
+  )
+}
+
 export default async function ClientDetailPage({
   params,
 }: {
@@ -239,6 +347,7 @@ export default async function ClientDetailPage({
   const stateEntries = mapClientState(client)
   const meals = await getClientMeals(id, { limit: 40 })
   const todayMeals = await getClientMealsForDay(id)
+  const whatsappMessages = await getClientWhatsAppConversation(id, authUserId, 20)
   const latestMeals = meals.slice(0, 6)
   const mealEntries = mapMealRecordsToTimelineEntries(latestMeals)
   const todayMacros = sumMeals(todayMeals)
@@ -528,6 +637,8 @@ export default async function ClientDetailPage({
             enableReviewActions
           />
         </DashboardSection>
+
+        <WhatsAppConversation messages={whatsappMessages} />
 
         <DashboardSection title="Latest Activity">
           <ClientTimeline sources={[eventEntries, stateEntries, mealEntries]} />
