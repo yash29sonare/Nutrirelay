@@ -110,7 +110,14 @@ function formatGoalType(value: unknown): string {
 function valueText(record: Record<string, any> | null | undefined, key: string, fallback = "Not set") {
   const value = record?.[key]
   if (value === null || value === undefined || value === "") return fallback
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : fallback
   return String(value)
+}
+
+function listText(value: unknown, fallback = "Not set") {
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : fallback
+  if (typeof value === "string" && value.trim()) return value
+  return fallback
 }
 
 function computeBmi(health: Record<string, any> | null): string | null {
@@ -176,6 +183,22 @@ function messageTypeLabel(message: ClientWhatsAppMessage) {
   return message.message_type
 }
 
+function mediaReadinessText(message: ClientWhatsAppMessage): string | null {
+  const type = message.message_type.toUpperCase()
+  const isMediaType = ["IMAGE", "AUDIO", "VOICE", "VIDEO", "DOCUMENT", "MEDIA"].includes(type)
+  if (!isMediaType && !message.media_kind && !message.parser_status && !message.skip_reason) return null
+
+  const mediaLabel = message.media_kind ? message.media_kind.replace(/_/g, " ") : type.toLowerCase()
+  const storageState = message.has_media_url ? "media reference saved" : "metadata only"
+  const transcriptState = type === "AUDIO" || type === "VOICE"
+    ? message.has_transcript ? "transcript available" : "no transcript saved"
+    : null
+  const parserState = message.parser_status ? `parser state: ${message.parser_status.replace(/_/g, " ")}` : null
+  const skipState = message.skip_reason ? `skip reason: ${message.skip_reason.replace(/_/g, " ")}` : null
+
+  return [mediaLabel, storageState, transcriptState, parserState, skipState].filter(Boolean).join(" · ")
+}
+
 function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMessage[]; error: string | null }) {
   return (
     <DashboardSection title="WhatsApp Conversation" description="Saved message history and delivery status for this client">
@@ -208,6 +231,12 @@ function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMes
                   <p className="mt-3 text-sm leading-6 text-[var(--foreground)]">
                     {message.display_text}
                   </p>
+
+                  {mediaReadinessText(message) ? (
+                    <div className="mt-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-card)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">
+                      Media handling: {mediaReadinessText(message)}
+                    </div>
+                  ) : null}
 
                   {message.food_log ? (
                     <div className="mt-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-card)] px-3 py-2 text-xs text-[var(--muted)]">
@@ -347,8 +376,8 @@ export default async function ClientDetailPage({
   const events = await getClientEvents(id)
   const eventEntries = mapEngagementEvents(events, id)
   const stateEntries = mapClientState(client)
-  const meals = await getClientMeals(id, { limit: 40 })
-  const todayMeals = await getClientMealsForDay(id)
+  const meals = await getClientMeals(id, { limit: 40, trainerId: authUserId })
+  const todayMeals = await getClientMealsForDay(id, new Date(), authUserId)
   let whatsappMessages: ClientWhatsAppMessage[] = []
   let whatsappConversationError: string | null = null
   try {
@@ -366,6 +395,7 @@ export default async function ClientDetailPage({
 
   const activeGoal = clientDetail?.goal ?? null
   const health = clientDetail?.health ?? null
+  const preferences = clientDetail?.preferences ?? null
   const onboarding = clientDetail?.onboarding ?? null
   const workout = clientDetail?.workout ?? null
   const latestPhotoMedia = (clientDetail?.media ?? [])
@@ -505,6 +535,102 @@ export default async function ClientDetailPage({
 
           <ActivityPreview entries={latestActivityEntries} />
         </div>
+
+        <DashboardSection
+          title="Onboarding Readiness"
+          description="Saved WhatsApp onboarding answers, profile fields, and routine data used before normal food logging."
+        >
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card>
+              <CardContent className="space-y-3">
+                <p className="text-sm font-semibold text-[var(--foreground)]">Health profile</p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Status</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {onboarding?.status?.replace(/_/g, " ") ?? "Not started"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Current step</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {onboarding?.current_step?.replace(/_/g, " ") ?? "Not started"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Height</p>
+                    <p className="font-medium text-[var(--foreground)]">{valueText(health, "height_cm")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Weight</p>
+                    <p className="font-medium text-[var(--foreground)]">{valueText(health, "weight_kg")}</p>
+                  </div>
+                </div>
+                <p className="text-xs leading-5 text-[var(--muted)]">
+                  Missing fields: {onboarding?.missing_fields?.length ? onboarding.missing_fields.join(", ") : "None"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-3">
+                <p className="text-sm font-semibold text-[var(--foreground)]">Nutrition preferences</p>
+                <div className="grid grid-cols-1 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Diet preference</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {valueText(health, "diet_type", valueText(preferences, "diet_type", valueText(preferences, "preference")))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Allergies</p>
+                    <p className="font-medium text-[var(--foreground)]">{listText(health?.allergies, "None")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Dislikes / restrictions</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {valueText(preferences, "dislikes", valueText(health, "food_restrictions", "Not set"))}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-3">
+                <p className="text-sm font-semibold text-[var(--foreground)]">Routine and check-in</p>
+                <div className="grid grid-cols-1 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Meal routine</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {[
+                        onboarding?.skipped_meals?.includes("breakfast") ? "Breakfast skipped" : workout?.breakfast_time ? `Breakfast ${workout.breakfast_time}` : null,
+                        workout?.lunch_time ? `Lunch ${workout.lunch_time}` : null,
+                        workout?.snack_time ? `Snack ${workout.snack_time}` : null,
+                        workout?.dinner_time ? `Dinner ${workout.dinner_time}` : null,
+                      ].filter(Boolean).join(", ") || "Not set"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Workout schedule</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {[
+                        valueText(workout, "workout_time", ""),
+                        listText(workout?.workout_days, ""),
+                      ].filter(Boolean).join(" · ") || "Not set"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Check-in</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {valueText(workout, "checkin_preference", valueText(workout, "preferred_checkin_time"))}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </DashboardSection>
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
           <DashboardSection title="Today's Macros" description={`${todayMeals.length} logged intake event${todayMeals.length !== 1 ? "s" : ""} for ${formatDate(new Date())}`}>

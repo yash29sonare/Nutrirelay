@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
-import { Activity, ArrowUpRight, Bot, CheckCircle2, CircleAlert, Clock, LifeBuoy, MessageSquare, Shield } from "lucide-react"
+import { Activity, ArrowUpRight, Bot, CheckCircle2, CircleAlert, Clock, CreditCard, LifeBuoy, MessageSquare, Shield } from "lucide-react"
 import { SettingsAccountSection } from "./SettingsAccountSection"
 import { SettingsProfileForm } from "./SettingsProfileForm"
 import { getManualWabaOnboardingReadiness, type ManualWabaCredentialState } from "@/lib/waba/manual-onboarding-readiness"
@@ -207,7 +207,7 @@ export default async function SettingsPage() {
                   {credential ? connectionMessage(credential.state) : "No WhatsApp credential is connected for this trainer."}
                 </p>
                 <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                  Manual WABA onboarding requires operator-secured credential setup. No token input is available here.
+                  Manual WABA onboarding requires operator-secured credential setup. Saved credential status is shown from NutriRelay only; this is not live Meta validation.
                 </p>
               </div>
               {!isCredentialConnected ? (
@@ -217,12 +217,54 @@ export default async function SettingsPage() {
               ) : null}
             </div>
 
+            <div className="rounded-xl border border-dashed border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">Reconnect lifecycle</h3>
+                  <p className="text-xs leading-5 text-[var(--muted)]">
+                    Self-serve reconnect is not enabled yet. Operator-assisted credential refresh is required for the manual pilot if a saved credential becomes expired, disconnected, or invalid.
+                  </p>
+                  <p className="text-xs leading-5 text-[var(--muted)]">
+                    Existing WhatsApp Business App numbers may be supported later through Meta coexistence.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--muted)]"
+                >
+                  Self-serve reconnect unavailable
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <FieldValue label="Phone number ID" value={credential?.phoneNumberId ?? null} />
               <FieldValue label="WABA / business account ID" value={credential?.wabaId ?? credential?.businessAccountId ?? null} />
               <FieldValue label="Updated at" value={credential?.updatedAt ? formatDateTime(credential.updatedAt) : null} />
               <FieldValue label="Connected at" value={credential?.connectedAt ? formatDateTime(credential.connectedAt) : null} />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--info)]/10 text-[var(--info)]">
+                <CreditCard size={16} />
+              </div>
+              <div>
+                <CardTitle>Subscription / Payment Gating</CardTitle>
+                <CardDescription>
+                  Billing foundation for paid SaaS access without connecting a payment provider in this milestone.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <ChecklistItem done label="Current plan is visible" detail={`Saved plan: ${subscriptionPlan}.`} />
+            <ChecklistItem done label="Manual pilot remains available" detail="Current manual trainer WABA pilot is not blocked by billing until payment enforcement is enabled." />
+            <ChecklistItem done={false} label="Billing provider not connected" detail="No fake paid state is shown. WhatsApp connection can require an active plan when billing is enabled." />
           </CardContent>
         </Card>
 
@@ -272,8 +314,16 @@ export default async function SettingsPage() {
 
             <div className="flex flex-col gap-2 rounded-xl border border-dashed border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4 text-xs leading-5 text-[var(--muted)]">
               <p>Self-serve Embedded Signup is not enabled yet.</p>
+              <p>Manual onboarding and future self-serve connection are intentionally separate flows.</p>
               <p>No Meta API call, token refresh, or live WhatsApp send is required for this readiness screen.</p>
               <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--muted)]"
+                >
+                  Connect WhatsApp later
+                </button>
                 <Link
                   href="/dashboard/whatsapp-dev"
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface-overlay)]"

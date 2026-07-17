@@ -91,6 +91,11 @@ export interface ClientWhatsAppMessage {
   latest_status: string
   status_history: ClientWhatsAppStatus[]
   food_log: ClientWhatsAppFoodContext | null
+  media_kind: string | null
+  has_media_url: boolean
+  has_transcript: boolean
+  parser_status: string | null
+  skip_reason: string | null
 }
 
 export interface DailyNutrition {
@@ -114,6 +119,14 @@ function readMetadataText(metadata: Record<string, any> | null, messageType: str
   }
   if (messageType === "TEMPLATE") return "Template message"
   return direction === "INBOUND" ? "Inbound WhatsApp message" : "Outbound WhatsApp message"
+}
+
+function metadataString(metadata: Record<string, any> | null, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = metadata?.[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return null
 }
 
 function statusTimestamp(row: {
@@ -542,6 +555,11 @@ export async function getClientWhatsAppConversation(
       latest_status: latestStatus,
       status_history: statusHistory,
       food_log: row.wam_id ? foodByWamId.get(row.wam_id) ?? null : null,
+      media_kind: metadataString(row.metadata, ["media_kind", "media_type"]),
+      has_media_url: Boolean(metadataString(row.metadata, ["media_url", "storage_path", "image_path"])),
+      has_transcript: Boolean(metadataString(row.metadata, ["transcript", "transcription", "voice_transcript"])),
+      parser_status: metadataString(row.metadata, ["parser_status", "processing_status", "automation_state", "intent"]),
+      skip_reason: metadataString(row.metadata, ["skip_reason", "unsupported_reason", "media_skip_reason"]),
     }
   })
 }
@@ -549,12 +567,18 @@ export async function getClientWhatsAppConversation(
 export async function getDailyNutrition(clientId: string, date: string, trainerId?: string): Promise<DailyNutrition[]> {
   const db = getDb()
 
-  const { data: meals } = await db
+  let query = db
     .from("food_logs")
     .select("logged_at, calories, protein_g, carbs_g, fat_g")
     .eq("client_id", clientId)
     .gte("logged_at", `${date}T00:00:00Z`)
     .lt("logged_at", `${date}T23:59:59Z`)
+
+  if (trainerId) {
+    query = query.eq("trainer_id", trainerId)
+  }
+
+  const { data: meals } = await query
     .order("logged_at", { ascending: true })
 
   const rows = (meals ?? []) as Array<{ logged_at: string; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }>
@@ -584,11 +608,17 @@ export async function getWeeklyNutrition(clientId: string, trainerId?: string): 
   const db = getDb()
   const weekAgo = new Date(Date.now() - 7 * MS_PER_DAY).toISOString()
 
-  const { data: meals } = await db
+  let query = db
     .from("food_logs")
     .select("logged_at, calories, protein_g, carbs_g, fat_g")
     .eq("client_id", clientId)
     .gte("logged_at", weekAgo)
+
+  if (trainerId) {
+    query = query.eq("trainer_id", trainerId)
+  }
+
+  const { data: meals } = await query
     .order("logged_at", { ascending: true })
 
   const rows = (meals ?? []) as Array<{ logged_at: string; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }>
@@ -622,11 +652,17 @@ export async function getMonthlyNutrition(clientId: string, trainerId?: string):
   const db = getDb()
   const monthAgo = new Date(Date.now() - 30 * MS_PER_DAY).toISOString()
 
-  const { data: meals } = await db
+  let query = db
     .from("food_logs")
     .select("logged_at, calories, protein_g, carbs_g, fat_g")
     .eq("client_id", clientId)
     .gte("logged_at", monthAgo)
+
+  if (trainerId) {
+    query = query.eq("trainer_id", trainerId)
+  }
+
+  const { data: meals } = await query
     .order("logged_at", { ascending: true })
 
   const rows = (meals ?? []) as Array<{ logged_at: string; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null }>

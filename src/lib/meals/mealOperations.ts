@@ -142,34 +142,50 @@ export async function getMeal(mealId: string): Promise<MealRecord | null> {
 
 export async function getClientMeals(
   clientId: string,
-  options?: { limit?: number; offset?: number },
+  options?: { limit?: number; offset?: number; trainerId?: string },
 ): Promise<MealRecord[]> {
   const db = getDb()
 
   const limit = options?.limit ?? 50
   const offset = options?.offset ?? 0
 
-  const { data } = await db
+  let query = db
     .from("food_logs")
     .select("*")
     .eq("client_id", clientId)
+
+  if (options?.trainerId) {
+    query = query.eq("trainer_id", options.trainerId)
+  }
+
+  const { data } = await query
     .order("logged_at", { ascending: false })
     .range(offset, offset + limit - 1)
 
   return ((data ?? []) as FoodLogRow[]).map(mapFoodLogToMealRecord)
 }
 
-export async function getClientMealsForDay(clientId: string, date = new Date()): Promise<MealRecord[]> {
+export async function getClientMealsForDay(
+  clientId: string,
+  date = new Date(),
+  trainerId?: string,
+): Promise<MealRecord[]> {
   const db = getDb()
   const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
 
-  const { data } = await db
+  let query = db
     .from("food_logs")
     .select("*")
     .eq("client_id", clientId)
     .gte("logged_at", start.toISOString())
     .lt("logged_at", end.toISOString())
+
+  if (trainerId) {
+    query = query.eq("trainer_id", trainerId)
+  }
+
+  const { data } = await query
     .order("logged_at", { ascending: false })
 
   return ((data ?? []) as FoodLogRow[]).map(mapFoodLogToMealRecord).filter((meal) => countsTowardMacros(meal.reviewState))
