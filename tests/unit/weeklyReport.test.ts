@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { buildWeeklyClientReportSummary, getAmbiguousWeeklyReportClientIds } from "@/lib/automation/weekly-report"
+import { buildWeeklyClientReportSummary, filterReportableFoodLogs, getAmbiguousWeeklyReportClientIds } from "@/lib/automation/weekly-report"
+import { summarizeMonthlyProjectionFoodLogs } from "@/lib/automation/monthly-projections"
 
 describe("weekly report helpers", () => {
   it("flags clients with multiple active trainer links as ambiguous", () => {
@@ -44,6 +45,32 @@ describe("weekly report helpers", () => {
       reviewNeededItems: 1,
       macroTotals: { calories: 1200, protein: 65, carbs: 140, fat: 35 },
       projection: "on_track",
+    })
+  })
+
+  it("excludes rejected and merged food logs from report macros", () => {
+    const logs = [
+      { calories: 500, protein_g: 30, carbs_g: 60, fat_g: 15, verification_status: "VERIFIED", review_state: "corrected", logged_at: "2026-07-19T08:00:00Z" },
+      { calories: 900, protein_g: 10, carbs_g: 100, fat_g: 40, verification_status: "VERIFIED", review_state: "rejected", logged_at: "2026-07-19T12:00:00Z" },
+      { calories: 300, protein_g: 15, carbs_g: 35, fat_g: 8, verification_status: "VERIFIED", review_state: "merged", logged_at: "2026-07-19T18:00:00Z" },
+      { calories: null, protein_g: null, carbs_g: null, fat_g: null, verification_status: "NEEDS_REVIEW", review_state: "needs_review", logged_at: "2026-07-20T08:00:00Z" },
+    ]
+
+    expect(filterReportableFoodLogs(logs).map((log) => log.review_state)).toEqual(["corrected", "needs_review"])
+
+    const weekly = buildWeeklyClientReportSummary({
+      foodLogs: logs,
+      communicationLogs: [],
+    })
+
+    expect(weekly.mealsLogged).toBe(2)
+    expect(weekly.macroTotals).toEqual({ calories: 500, protein: 30, carbs: 60, fat: 15 })
+
+    const monthly = summarizeMonthlyProjectionFoodLogs(logs)
+    expect(monthly).toMatchObject({
+      reportableMeals: 2,
+      totalCalories: 500,
+      avgDailyCalories: 17,
     })
   })
 })

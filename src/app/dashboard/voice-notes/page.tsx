@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient } from "@/utils/supabase/server";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -12,7 +13,7 @@ import type { Database } from "@/shared/types/supabase";
 export const dynamic = "force-dynamic";
 
 function getDb() {
-  return createClient<Database>(
+  return createServiceClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -63,10 +64,10 @@ async function fetchFailedVoiceNotes(trainerId: string): Promise<VoiceNoteRow[]>
 const MS_PER_HOUR = 1000 * 60 * 60;
 
 export default async function VoiceNotesPage() {
-  const db = getDb();
+  const supabase = await createClient();
   const {
     data: { user },
-  } = await db.auth.getUser();
+  } = await supabase.auth.getUser();
   const trainerId = user?.id ?? null;
 
   const rows = trainerId ? await fetchFailedVoiceNotes(trainerId) : [];

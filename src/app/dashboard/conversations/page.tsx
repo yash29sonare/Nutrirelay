@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { createClient } from "@/utils/supabase/server"
 import { PageContainer } from "@/components/layout/PageContainer"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { ConversationQueue } from "./components/ConversationQueue"
@@ -12,7 +13,7 @@ import type { Database } from "@/shared/types/supabase"
 export const dynamic = "force-dynamic"
 
 function getDb() {
-  return createClient<Database>(
+  return createServiceClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
@@ -20,10 +21,11 @@ function getDb() {
 
 export default async function ConversationsPage() {
   const db = getDb()
+  const supabase = await createClient()
 
   const {
     data: { user },
-  } = await db.auth.getUser()
+  } = await supabase.auth.getUser()
   const trainerId = user?.id ?? null
 
   if (!trainerId) {

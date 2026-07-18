@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient } from "@/utils/supabase/server";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
 
 function getDb() {
-  return createClient(
+  return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -74,10 +75,10 @@ export default async function RosterPage({
   const status = sp.status ?? "all";
   const search = sp.search ?? "";
 
-  const db = getDb();
+  const supabase = await createClient();
   const {
     data: { user },
-  } = await db.auth.getUser();
+  } = await supabase.auth.getUser();
   const trainerId = user?.id ?? null;
 
   const { rows, total } = trainerId

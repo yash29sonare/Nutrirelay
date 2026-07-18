@@ -2,7 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 import { runAI } from "@/ai/aiGateway";
 import { geminiModels } from "@/mastra/config";
 import { sendDocumentMessage } from "@/lib/whatsapp/send";
+import { countsTowardMacros } from "@/lib/meals/reviewRules";
 import { buildSimplePdf, wrapText, type PdfLine } from "@/lib/pdf/weekly-report";
+import type { MealReviewState } from "@/types/meal";
 
 const REPORTS_BUCKET = "weekly-reports";
 const WEEK_DAYS = 7;
@@ -130,6 +132,10 @@ export function getAmbiguousWeeklyReportClientIds(
   );
 }
 
+export function filterReportableFoodLogs<T extends { review_state?: string | null }>(logs: T[]): T[] {
+  return logs.filter((log) => countsTowardMacros(log.review_state as MealReviewState | null | undefined));
+}
+
 // ── Aggregate a week of food logs into report metrics ──────────────────────────
 function aggregate(logs: FoodLogRow[]): WeeklyAggregate {
   const logCount = logs.length;
@@ -177,7 +183,7 @@ function aggregate(logs: FoodLogRow[]): WeeklyAggregate {
 }
 
 export function buildWeeklyClientReportSummary(input: WeeklyClientSummaryInput): WeeklyClientReportSummary {
-  const logs = input.foodLogs;
+  const logs = filterReportableFoodLogs(input.foodLogs);
   const communicationLogs = input.communicationLogs;
   const activeLogDays = new Set(logs.map((log) => log.logged_at.slice(0, 10))).size;
   const macroTotals = logs.reduce(
@@ -401,12 +407,12 @@ export async function generateWeeklyReports(): Promise<WeeklyReportSummary> {
       // 1. Aggregate the week's logs
       const { data: logs } = await db
         .from("food_logs")
-        .select("calories, protein_g, carbs_g, fat_g, verification_status, logged_at")
+        .select("calories, protein_g, carbs_g, fat_g, verification_status, review_state, logged_at")
         .eq("client_id", clientId)
         .eq("trainer_id", trainerId)
         .gte("logged_at", weekStartIso);
 
-      const foodLogs = (logs ?? []) as FoodLogRow[];
+      const foodLogs = filterReportableFoodLogs((logs ?? []) as FoodLogRow[]);
       if (foodLogs.length === 0) {
         summary.skippedNoData++;
         continue; // no activity this week — nothing to report

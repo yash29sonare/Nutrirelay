@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { calculateCompliance } from "../compliance-engine"
+import { countsTowardMacros } from "@/lib/meals/reviewRules"
+import type { MealReviewState } from "@/types/meal"
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MONTH_DAYS = 30
@@ -16,6 +18,27 @@ export interface MonthlyProjectionSummary {
   evaluated: number
   generated: number
   errors: number
+}
+
+export interface MonthlyProjectionFoodLog {
+  calories: number | null
+  logged_at: string
+  review_state?: string | null
+}
+
+export function summarizeMonthlyProjectionFoodLogs(meals: MonthlyProjectionFoodLog[]): {
+  reportableMeals: number
+  totalCalories: number
+  avgDailyCalories: number
+} {
+  const reportableMeals = meals.filter((meal) => countsTowardMacros(meal.review_state as MealReviewState | null | undefined))
+  const totalCalories = reportableMeals.reduce((sum, meal) => sum + Number(meal.calories ?? 0), 0)
+
+  return {
+    reportableMeals: reportableMeals.length,
+    totalCalories,
+    avgDailyCalories: reportableMeals.length > 0 ? Math.round(totalCalories / MONTH_DAYS) : 0,
+  }
 }
 
 export async function generateMonthlyProjections(): Promise<MonthlyProjectionSummary> {
@@ -53,13 +76,12 @@ export async function generateMonthlyProjections(): Promise<MonthlyProjectionSum
 
       const { data: meals } = await db
         .from("food_logs")
-        .select("calories, logged_at")
+        .select("calories, logged_at, review_state")
         .eq("client_id", clientId)
+        .eq("trainer_id", trainerId)
         .gte("logged_at", thirtyDaysAgo)
 
-      const mealRows = (meals ?? []) as Array<{ calories: number | null; logged_at: string }>
-      const totalCalories = mealRows.reduce((sum, m) => sum + Number(m.calories ?? 0), 0)
-      const avgDailyCalories = mealRows.length > 0 ? Math.round(totalCalories / MONTH_DAYS) : 0
+      const { avgDailyCalories } = summarizeMonthlyProjectionFoodLogs((meals ?? []) as MonthlyProjectionFoodLog[])
 
       let goalProjectionScore: number | null = null
       let predictedSuccess: boolean | null = null
@@ -80,8 +102,6 @@ export async function generateMonthlyProjections(): Promise<MonthlyProjectionSum
       } else {
         summaryText = `No active goal. Avg ${avgDailyCalories} kcal/day over 30 days. Compliance: ${compliance.compliance_score}%.`
       }
-
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
 
       await db.from("monthly_reports").insert({
         client_id: clientId,
