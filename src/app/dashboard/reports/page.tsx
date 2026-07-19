@@ -1,65 +1,203 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/Card"
+import Link from "next/link"
+import { Calendar, Download, FileText, MessageSquare, Send, Users } from "lucide-react"
 import { Badge } from "@/components/ui/Badge"
-import { StatCard } from "@/components/dashboard/StatCard"
-import { PageContainer } from "@/components/layout/PageContainer"
-import { PageHeader } from "@/components/layout/PageHeader"
-import { DashboardSection } from "@/components/layout/DashboardSection"
-import { DashboardGrid } from "@/components/layout/DashboardGrid"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { ErrorState } from "@/components/ui/ErrorState"
 import { InlineNotice } from "@/components/ui/InlineNotice"
-import { getTrainerWeeklyReportHistory } from "@/lib/dashboard-reads"
-import { getDashboardData } from "@/lib/operations/dashboard"
-import { getEvents } from "@/lib/events/engagementEventStore"
+import { PageContainer } from "@/components/layout/PageContainer"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { createClient } from "@/utils/supabase/server"
-import { buildAnalyticsDTO } from "@/lib/analytics/analyticsEngine"
-import { formatPercent, formatDate, formatRelativeDate, formatNumber } from "@/lib/format"
 import {
-  AlertTriangle, CheckCircle, TrendingUp, TrendingDown,
-  Activity, MessageSquare, Bell, Send,
-  UtensilsCrossed, Users, Zap, ChevronRight,
-  History, Eye, BarChart3, Clock, XCircle,
-  FileText, Download, Calendar, Printer,
-  ArrowRight, RefreshCw,
-} from "lucide-react"
-import Link from "next/link"
+  getReportDownloadHref,
+  getTrainerReportsCenterData,
+  type NutritionPeriodReport,
+  type ReportAutomationPlanItem,
+  type ReportStatus,
+} from "@/lib/reports/report-center"
+import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
 
 export const dynamic = "force-dynamic"
 
-const EVENT_ICONS: Record<string, React.ReactNode> = {
-  COMMUNICATION_QUEUED: <Clock size={12} />,
-  COMMUNICATION_SENT: <Send size={12} />,
-  COMMUNICATION_FAILED: <XCircle size={12} />,
-  CONVERSATION_PLANNED: <MessageSquare size={12} />,
-  CONVERSATION_APPROVED: <CheckCircle size={12} />,
-  REMINDER_PLANNED: <Bell size={12} />,
-  REMINDER_APPROVED: <CheckCircle size={12} />,
-  MEAL_RECORDED: <UtensilsCrossed size={12} />,
-  MEAL_REVIEWED: <Eye size={12} />,
-  AUTOMATION_STARTED: <Zap size={12} />,
-  AUTOMATION_COMPLETED: <CheckCircle size={12} />,
-  AUTOMATION_FAILED: <AlertTriangle size={12} />,
+function statusVariant(status: ReportStatus): "success" | "warning" | "outline" | "default" {
+  switch (status) {
+    case "ready":
+      return "success"
+    case "partial":
+      return "warning"
+    case "no_data":
+      return "outline"
+    default:
+      return "default"
+  }
 }
 
-const EVENT_VARIANTS: Record<string, "brand" | "success" | "warning" | "danger" | "info" | "default"> = {
-  COMMUNICATION_QUEUED: "info",
-  COMMUNICATION_SENT: "success",
-  COMMUNICATION_FAILED: "danger",
-  CONVERSATION_PLANNED: "info",
-  CONVERSATION_APPROVED: "success",
-  REMINDER_PLANNED: "brand",
-  REMINDER_APPROVED: "success",
-  MEAL_RECORDED: "brand",
-  MEAL_REVIEWED: "success",
-  AUTOMATION_STARTED: "info",
-  AUTOMATION_COMPLETED: "success",
-  AUTOMATION_FAILED: "danger",
+function ReportCard({ report }: { report: NutritionPeriodReport }) {
+  const downloadName = `NutriRelay-${report.client.name.replace(/[^a-z0-9]+/gi, "-")}-${report.kind}-${report.period.startDate}.csv`
+  const activeDays = report.dailyBreakdown.filter((day) => day.mealCount > 0)
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>{report.client.name}</CardTitle>
+            <CardDescription>
+              {report.period.label} · {formatDate(report.period.startIso)} to {formatDate(report.period.endDate)}
+            </CardDescription>
+          </div>
+          <Badge variant={statusVariant(report.status)}>{report.status.replace("_", " ")}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-[var(--muted)]">Calories</p>
+            <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">{formatNumber(report.totals.calories)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--muted)]">Protein</p>
+            <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">{formatNumber(report.totals.protein)}g</p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--muted)]">Carbs</p>
+            <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">{formatNumber(report.totals.carbs)}g</p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--muted)]">Fat</p>
+            <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">{formatNumber(report.totals.fat)}g</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-3">
+            <p className="text-xs text-[var(--muted)]">Daily average</p>
+            <p className="mt-1 font-medium text-[var(--foreground)]">
+              {formatNumber(report.dailyAverages.calories)} kcal · P {formatNumber(report.dailyAverages.protein)}g
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-3">
+            <p className="text-xs text-[var(--muted)]">Data quality</p>
+            <p className="mt-1 font-medium text-[var(--foreground)]">
+              {report.reportableMealCount} counted · {report.excludedMealCount} excluded · {report.missingMacroEntries} partial
+            </p>
+          </div>
+        </div>
+
+        {report.goalComparison ? (
+          <InlineNotice variant="info">{report.goalComparison}</InlineNotice>
+        ) : null}
+
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Daily breakdown</p>
+          {activeDays.length > 0 ? (
+            <div className="max-h-56 overflow-auto rounded-lg border border-[var(--surface-border)]">
+              <table className="w-full min-w-[520px] text-left text-xs">
+                <thead className="bg-[var(--surface-overlay)] text-[var(--muted)]">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Date</th>
+                    <th className="px-3 py-2 font-medium">Meals</th>
+                    <th className="px-3 py-2 font-medium">kcal</th>
+                    <th className="px-3 py-2 font-medium">P</th>
+                    <th className="px-3 py-2 font-medium">C</th>
+                    <th className="px-3 py-2 font-medium">F</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--surface-border)]">
+                  {report.dailyBreakdown.map((day) => (
+                    <tr key={day.date}>
+                      <td className="px-3 py-2 text-[var(--foreground)]">{formatDate(day.date)}</td>
+                      <td className="px-3 py-2 tabular-nums text-[var(--muted)]">{day.mealCount}</td>
+                      <td className="px-3 py-2 tabular-nums text-[var(--foreground)]">{formatNumber(day.totals.calories)}</td>
+                      <td className="px-3 py-2 tabular-nums text-[var(--foreground)]">{formatNumber(day.totals.protein)}</td>
+                      <td className="px-3 py-2 tabular-nums text-[var(--foreground)]">{formatNumber(day.totals.carbs)}</td>
+                      <td className="px-3 py-2 tabular-nums text-[var(--foreground)]">{formatNumber(day.totals.fat)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-[var(--surface-border)] p-4 text-sm text-[var(--muted)]">
+              No logged intake in this report period.
+            </div>
+          )}
+        </div>
+
+        {report.weeklyBreakdown.length > 0 ? (
+          <div>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Weekly breakdown</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {report.weeklyBreakdown.map((week) => (
+                <div key={week.weekStart} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-3 text-xs">
+                  <p className="font-medium text-[var(--foreground)]">{formatDate(week.weekStart)} to {formatDate(week.weekEnd)}</p>
+                  <p className="mt-1 text-[var(--muted)]">
+                    {week.mealCount} meals · {formatNumber(week.totals.calories)} kcal · P {formatNumber(week.totals.protein)}g
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+            <MessageSquare size={13} />
+            Share preview
+          </div>
+          <pre className="whitespace-pre-wrap text-xs leading-5 text-[var(--muted)]">{report.sharePreview}</pre>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={getReportDownloadHref(report)}
+            download={downloadName}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface-overlay)]"
+          >
+            <Download size={13} />
+            Download CSV
+          </a>
+          <button
+            type="button"
+            disabled
+            className="inline-flex cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--muted)]"
+          >
+            <Send size={13} />
+            Share via WhatsApp gated
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
-const riskBadgeVariant: Record<string, "danger" | "warning" | "default"> = {
-  high: "danger",
-  medium: "warning",
-  low: "default",
+function AutomationPlan({ title, items }: { title: string; items: ReportAutomationPlanItem[] }) {
+  const wouldSend = items.filter((item) => item.action === "would_send").length
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>
+          Dry-run only · {wouldSend} would send · {items.length - wouldSend} skipped
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {items.length > 0 ? items.slice(0, 8).map((item) => (
+          <div key={`${item.kind}-${item.clientId}`} className="flex items-start justify-between gap-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-3 text-sm">
+            <div>
+              <p className="font-medium text-[var(--foreground)]">{item.clientName}</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{item.reason}</p>
+            </div>
+            <Badge variant={item.action === "would_send" ? "success" : "outline"}>
+              {item.action.replace("_", " ")}
+            </Badge>
+          </div>
+        )) : (
+          <EmptyState icon={<Send size={16} />} title="No automation candidates" description="Active clients with report data will appear here." />
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export default async function ReportsPage() {
@@ -72,837 +210,151 @@ export default async function ReportsPage() {
   if (!authUserId) {
     return (
       <PageContainer>
-        <PageHeader title="Reports" description="Sign in to view reports." />
+        <PageHeader title="Reports" description="Sign in to view trainer-scoped reports." />
       </PageContainer>
     )
   }
 
-  const result = await getDashboardData(authUserId)
-
-  if (!result.success) {
+  let data
+  try {
+    data = await getTrainerReportsCenterData(authUserId)
+  } catch (err) {
     return (
       <PageContainer>
-        <PageHeader title="Reports" />
-        <ErrorState title="Unable to load reports." description={result.error.message} />
+        <PageHeader title="Reports" description="Weekly and monthly nutrition reports." />
+        <ErrorState title="Unable to load reports." description={(err as Error).message} />
       </PageContainer>
     )
   }
 
-  const dto = result.data
-  const events = await getEvents(authUserId)
-  const analytics = buildAnalyticsDTO(dto, events)
-  const weeklyReportHistory = await getTrainerWeeklyReportHistory(authUserId)
-
-  const reportDate = formatDate(new Date().toISOString())
-
-  const quickLinks = [
-    { href: "/dashboard/analytics", label: "Analytics", icon: <BarChart3 size={14} /> },
-    { href: "/dashboard/communications", label: "Communications", icon: <MessageSquare size={14} /> },
-    { href: "/dashboard/clients", label: "Clients", icon: <Users size={14} /> },
-    { href: "/dashboard/events", label: "Events", icon: <Activity size={14} /> },
-    { href: "/dashboard", label: "Dashboard", icon: <Activity size={14} /> },
-  ]
+  const currentMonthReady = data.monthlyReports.filter((report) => report.status !== "no_data").length
+  const currentWeekReady = data.weeklyReports.filter((report) => report.status !== "no_data").length
 
   return (
     <PageContainer>
       <PageHeader
         title="Reports"
-        description={`Comprehensive business report — ${reportDate}. All metrics derived from existing data.`}
+        description={`Trainer Reports Center · generated ${formatDateTime(data.generatedAt)}`}
       />
 
-      {/* ════════════════════════════════════════════════════════
-          SECTION 1: Report Summary
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Report Summary"
-        description={`Snapshot for ${reportDate}`}
-      >
-        <DashboardGrid columns={4}>
-          <StatCard
-            icon={<Users size={16} />}
-            value={dto.metrics.activeClients}
-            label="Active clients"
-            iconBg="bg-brand-500/10"
-            iconColor="text-brand-500"
-          />
-          <StatCard
-            icon={<UtensilsCrossed size={16} />}
-            value={formatNumber(analytics.mealAnalytics.mealsToday)}
-            label="Total meals"
-            iconBg="bg-[var(--success)]/10"
-            iconColor="text-[var(--success)]"
-            trend={{ value: `${analytics.mealAnalytics.meals7Days} in 7 days`, positive: true }}
-          />
-          <StatCard
-            icon={<Eye size={16} />}
-            value={formatNumber(analytics.mealAnalytics.totalReviewEvents)}
-            label="Total reviews"
-            iconBg="bg-[var(--info)]/10"
-            iconColor="text-[var(--info)]"
-            trend={{ value: `${analytics.mealAnalytics.reviewRate}% rate`, positive: analytics.mealAnalytics.reviewRate >= 50 }}
-          />
-          <StatCard
-            icon={<MessageSquare size={16} />}
-            value={analytics.businessKPIs.pendingConversations}
-            label="Pending conversations"
-            iconBg="bg-[var(--warning)]/10"
-            iconColor="text-[var(--warning)]"
-            trend={analytics.businessKPIs.pendingConversations > 0
-              ? { value: "Needs review", positive: false }
-              : { value: "All handled", positive: true }
-            }
-          />
-        </DashboardGrid>
-
-        <div className="mt-3">
-          <DashboardGrid columns={4}>
-            <StatCard
-              icon={<Bell size={16} />}
-              value={analytics.businessKPIs.pendingReminders}
-              label="Pending reminders"
-              iconBg="bg-[var(--warning)]/10"
-              iconColor="text-[var(--warning)]"
-            />
-            <StatCard
-              icon={<Send size={16} />}
-              value={`${analytics.businessKPIs.commSuccessRate}%`}
-              label="Comm success rate"
-              iconBg="bg-[var(--success)]/10"
-              iconColor="text-[var(--success)]"
-              trend={{ value: `${analytics.businessKPIs.commSentToday} sent today`, positive: true }}
-            />
-            <StatCard
-              icon={<Zap size={16} />}
-              value={formatNumber(
-                analytics.communicationAnalytics.automationStarts +
-                analytics.communicationAnalytics.automationCompletions +
-                analytics.communicationAnalytics.automationFailures,
-              )}
-              label="Automation runs"
-              iconBg="bg-brand-500/10"
-              iconColor="text-brand-500"
-              trend={analytics.communicationAnalytics.automationFailures > 0
-                ? { value: `${analytics.communicationAnalytics.automationFailures} failed`, positive: false }
-                : { value: "No failures", positive: true }
-              }
-            />
-            <StatCard
-              icon={<RefreshCw size={16} />}
-              value={formatNumber(dto.metrics.weeklyProgress)}
-              label="Weekly progress %"
-              iconBg="bg-[var(--info)]/10"
-              iconColor="text-[var(--info)]"
-              trend={{
-                value: dto.metrics.weeklyProgress > 0 ? "Improving" : "Declining",
-                positive: dto.metrics.weeklyProgress > 0,
-              }}
-            />
-          </DashboardGrid>
-        </div>
-      </DashboardSection>
-
-      {/* ════════════════════════════════════════════════════════
-          SECTION 2: Business Snapshot
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Business Snapshot"
-        description="Printable report cards derived from analytics data"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-l-4 border-l-brand-500">
-            <CardHeader>
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                Client Health
-              </h3>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">At risk</span>
-                  <span className="font-semibold tabular-nums">{analytics.clientHealth.atRiskCount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Compliant today</span>
-                  <span className="font-semibold tabular-nums">{analytics.clientHealth.compliantClients}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Compliance rate</span>
-                  <span className="font-semibold tabular-nums">{formatPercent(analytics.clientHealth.complianceRate)}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-[var(--success)]">
-            <CardHeader>
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                Meal Activity
-              </h3>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Today</span>
-                  <span className="font-semibold tabular-nums">{formatNumber(analytics.mealAnalytics.mealsToday)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">7-day total</span>
-                  <span className="font-semibold tabular-nums">{formatNumber(analytics.mealAnalytics.meals7Days)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Review rate</span>
-                  <span className="font-semibold tabular-nums">{analytics.mealAnalytics.reviewRate}%</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-[var(--info)]">
-            <CardHeader>
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                Communications
-              </h3>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Queued today</span>
-                  <span className="font-semibold tabular-nums">{analytics.communicationAnalytics.commQueuedToday}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Sent today</span>
-                  <span className="font-semibold tabular-nums">{analytics.communicationAnalytics.commSentToday}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Success rate</span>
-                  <span className="font-semibold tabular-nums">{analytics.communicationAnalytics.commSuccessRate}%</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-[var(--warning)]">
-            <CardHeader>
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                Automation
-              </h3>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Total runs</span>
-                  <span className="font-semibold tabular-nums">
-                    {formatNumber(
-                      analytics.communicationAnalytics.automationStarts +
-                      analytics.communicationAnalytics.automationCompletions +
-                      analytics.communicationAnalytics.automationFailures,
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Completed</span>
-                  <span className="font-semibold tabular-nums">{analytics.communicationAnalytics.automationCompletions}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--muted)]">Failed</span>
-                  <span className="font-semibold tabular-nums text-[var(--destructive)]">
-                    {analytics.communicationAnalytics.automationFailures}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardSection>
-
-      {/* ════════════════════════════════════════════════════════
-          SECTION 3: Client Health Report
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Client Health Report"
-        description="Risk, compliance, and performance trend data reused from analytics domain"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Card>
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                <AlertTriangle size={14} />
-                Risk Distribution
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-1.5 text-[var(--destructive)]">
-                  <AlertTriangle size={12} /> High
-                </span>
-                <span className="font-semibold tabular-nums">{analytics.clientHealth.riskDistribution.high}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-1.5 text-[var(--warning)]">
-                  <AlertTriangle size={12} /> Medium
-                </span>
-                <span className="font-semibold tabular-nums">{analytics.clientHealth.riskDistribution.medium}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-1.5 text-[var(--success)]">
-                  <CheckCircle size={12} /> Low
-                </span>
-                <span className="font-semibold tabular-nums">{analytics.clientHealth.riskDistribution.low}</span>
-              </div>
-              <div className="pt-1 border-t border-[var(--surface-border)]">
-                <p className="text-xs text-[var(--muted)]">
-                  {analytics.clientHealth.atRiskCount} of {analytics.clientHealth.totalClients} clients at risk
-                </p>
+            <CardContent className="flex items-center gap-3 py-5">
+              <Users size={18} className="text-brand-500" />
+              <div>
+                <p className="text-2xl font-semibold text-[var(--foreground)]">{data.clients.length}</p>
+                <p className="text-xs text-[var(--muted)]">Trainer clients</p>
               </div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                <CheckCircle size={14} />
-                Compliance Report
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)]">Compliance rate</span>
-                <span className="font-semibold tabular-nums">{formatPercent(analytics.clientHealth.complianceRate)}</span>
-              </div>
-              <Badge
-                variant={
-                  analytics.clientHealth.complianceLevel === "excellent" || analytics.clientHealth.complianceLevel === "good"
-                    ? "success"
-                    : analytics.clientHealth.complianceLevel === "moderate"
-                      ? "default"
-                      : "warning"
-                }
-                className="w-fit"
-              >
-                {analytics.clientHealth.complianceLevel}
-              </Badge>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--success)]">Compliant today</span>
-                <span className="font-semibold tabular-nums">{analytics.clientHealth.compliantClients}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)]">No activity today</span>
-                <span className="font-semibold tabular-nums">{analytics.clientHealth.nonCompliantClients}</span>
+            <CardContent className="flex items-center gap-3 py-5">
+              <FileText size={18} className="text-[var(--success)]" />
+              <div>
+                <p className="text-2xl font-semibold text-[var(--foreground)]">{currentWeekReady}</p>
+                <p className="text-xs text-[var(--muted)]">Weekly reports with data</p>
               </div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                <TrendingUp size={14} />
-                Performance Trend
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2">
-                {analytics.clientHealth.performanceTrend === "improving" ? (
-                  <TrendingUp size={18} className="text-[var(--success)]" />
-                ) : analytics.clientHealth.performanceTrend === "declining" ? (
-                  <TrendingDown size={18} className="text-[var(--destructive)]" />
-                ) : (
-                  <Activity size={18} className="text-[var(--muted)]" />
-                )}
-                <span className="text-lg font-bold text-[var(--foreground)] capitalize">
-                  {analytics.clientHealth.performanceTrend}
-                </span>
+            <CardContent className="flex items-center gap-3 py-5">
+              <Calendar size={18} className="text-[var(--info)]" />
+              <div>
+                <p className="text-2xl font-semibold text-[var(--foreground)]">{currentMonthReady}</p>
+                <p className="text-xs text-[var(--muted)]">Monthly reports with data</p>
               </div>
-              <p className="text-xs text-[var(--muted)]">
-                Weekly progress: {analytics.clientHealth.weeklyProgress > 0 ? "+" : ""}
-                {analytics.clientHealth.weeklyProgress}%
-              </p>
-              <div className="pt-2">
-                <p className="text-xs font-medium text-[var(--muted)] mb-2">Compliance over time</p>
-                {analytics.performanceTrends.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {analytics.performanceTrends.slice(-5).map((entry) => (
-                      <div key={entry.date} className="flex items-center gap-2">
-                        <span className="text-[10px] text-[var(--muted)] w-20 shrink-0">
-                          {formatDate(entry.date)}
-                        </span>
-                        <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-border)] overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-brand-500"
-                            style={{ width: `${Math.round(entry.complianceRate)}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-[var(--foreground)] tabular-nums w-8 text-right">
-                          {Math.round(entry.complianceRate)}%
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-[var(--muted)]">No trend data available</p>
-                )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 py-5">
+              <MessageSquare size={18} className="text-[var(--warning)]" />
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">{data.wabaStatus.status}</p>
+                <p className="text-xs text-[var(--muted)]">Saved WABA status</p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {analytics.topAttentionClients.length > 0 && (
-          <Card className="mt-4">
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                <AlertTriangle size={14} />
-                Clients Needing Attention
-              </h3>
-            </CardHeader>
-            <div className="divide-y divide-[var(--surface-border)]">
-              {analytics.topAttentionClients.map((client) => (
-                <Link
-                  key={client.clientId}
-                  href={`/dashboard/clients/${client.clientId}`}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-overlay)] transition-colors"
-                >
-                  <Badge
-                    variant={riskBadgeVariant[client.riskLevel] ?? "default"}
-                    className="shrink-0 text-[10px] px-1.5 py-0.5"
-                  >
-                    {client.riskLevel}
-                  </Badge>
-                  <span className="text-sm text-[var(--foreground)] flex-1 min-w-0 truncate">
-                    {client.clientName}
-                  </span>
-                  <span className="text-xs text-[var(--muted)] tabular-nums shrink-0">
-                    {client.mealsLoggedToday} meals
-                  </span>
-                  <ChevronRight size={14} className="text-[var(--muted)] shrink-0" />
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
-      </DashboardSection>
-
-      {/* ════════════════════════════════════════════════════════
-          SECTION 4: Meal Report
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Meal Report"
-        description="Aggregate meal, review, and macro metrics from analytics domain"
-      >
-        <DashboardGrid columns={3}>
-          <StatCard
-            icon={<UtensilsCrossed size={16} />}
-            value={formatNumber(analytics.mealAnalytics.mealsToday)}
-            label="Meals today"
-            iconBg="bg-brand-500/10"
-            iconColor="text-brand-500"
-            trend={{ value: `${analytics.mealAnalytics.avgMealsPerClient} avg per client`, positive: true }}
-          />
-          <StatCard
-            icon={<History size={16} />}
-            value={formatNumber(analytics.mealAnalytics.meals7Days)}
-            label="Meals in 7 days"
-            iconBg="bg-[var(--info)]/10"
-            iconColor="text-[var(--info)]"
-          />
-          <StatCard
-            icon={<Eye size={16} />}
-            value={`${analytics.mealAnalytics.reviewRate}%`}
-            label="Review rate"
-            iconBg="bg-[var(--success)]/10"
-            iconColor="text-[var(--success)]"
-            trend={{ value: `${formatNumber(analytics.mealAnalytics.totalReviewEvents)} reviewed`, positive: true }}
-          />
-        </DashboardGrid>
-
-        <Card className="mt-4">
-          <CardContent className="py-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-[var(--muted)]">Total recorded</p>
-                <p className="font-semibold text-[var(--foreground)] tabular-nums">
-                  {formatNumber(analytics.mealAnalytics.totalMealEvents)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">Reviewed</p>
-                <p className="font-semibold text-[var(--foreground)] tabular-nums">
-                  {formatNumber(analytics.mealAnalytics.totalReviewEvents)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">Pending</p>
-                <p className="font-semibold text-[var(--warning)] tabular-nums">
-                  {analytics.businessKPIs.pendingReviews}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">7-day calories</p>
-                <p className="font-semibold text-[var(--foreground)] tabular-nums">
-                  {formatNumber(analytics.mealAnalytics.totalCaloriesWeek)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="mt-3">
-          <CardContent className="py-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-[var(--muted)]">7-day calories</p>
-                <p className="font-semibold text-[var(--foreground)] tabular-nums">
-                  {formatNumber(analytics.mealAnalytics.totalCaloriesWeek)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">7-day protein</p>
-                <p className="font-semibold text-[var(--foreground)] tabular-nums">
-                  {formatNumber(analytics.mealAnalytics.totalProteinWeek)}g
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">Avg per client</p>
-                <p className="font-semibold text-[var(--foreground)] tabular-nums">
-                  {analytics.mealAnalytics.avgMealsPerClient}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </DashboardSection>
-
-      {/* ════════════════════════════════════════════════════════
-          SECTION 5: Communication Report
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Communication Report"
-        description="Conversation, reminder, delivery, and automation metrics from event store"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                <MessageSquare size={14} />
-                Conversations
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)]">Total plans</span>
-                <span className="font-semibold tabular-nums">{formatNumber(analytics.communicationAnalytics.conversationPlansTotal)}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)]">Pending</span>
-                <span className="font-semibold tabular-nums text-[var(--warning)]">
-                  {analytics.communicationAnalytics.pendingConversations}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--success)]">Handled</span>
-                <span className="font-semibold tabular-nums">
-                  {Math.max(0, analytics.communicationAnalytics.conversationPlansTotal - analytics.communicationAnalytics.pendingConversations)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                <Bell size={14} />
-                Reminders
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)]">Total plans</span>
-                <span className="font-semibold tabular-nums">{formatNumber(analytics.communicationAnalytics.reminderPlansTotal)}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)]">Pending</span>
-                <span className="font-semibold tabular-nums text-[var(--warning)]">
-                  {analytics.communicationAnalytics.pendingReminders}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[var(--success)]">Handled</span>
-                <span className="font-semibold tabular-nums">
-                  {Math.max(0, analytics.communicationAnalytics.reminderPlansTotal - analytics.communicationAnalytics.pendingReminders)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="mt-4">
+        <Card>
           <CardHeader>
-            <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-              <Send size={14} />
-              Delivery & Automation Summary
-            </h3>
+            <CardTitle>Client report access</CardTitle>
+            <CardDescription>Owned active clients only. Select a client card below to open their profile or use the report cards for downloads and preview sharing.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-[var(--muted)]">Queued today</p>
-                <p className="font-semibold tabular-nums">{analytics.communicationAnalytics.commQueuedToday}</p>
+            {data.clients.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {data.clients.map((client) => (
+                  <Link
+                    key={client.id}
+                    href={`/dashboard/clients/${client.id}`}
+                    className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-4 transition-colors hover:bg-[var(--surface-overlay)]"
+                  >
+                    <p className="text-sm font-semibold text-[var(--foreground)]">{client.name}</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">{client.phoneNumber ?? "No phone number"}</p>
+                    <p className="mt-3 text-xs text-[var(--muted)]">{client.goal?.goalType ?? "No active goal saved"}</p>
+                  </Link>
+                ))}
               </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">Sent today</p>
-                <p className="font-semibold tabular-nums">{analytics.communicationAnalytics.commSentToday}</p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">Failed today</p>
-                <p className="font-semibold tabular-nums text-[var(--destructive)]">{analytics.communicationAnalytics.commFailedToday}</p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--muted)]">Success rate</p>
-                <p className="font-semibold tabular-nums text-[var(--success)]">{analytics.communicationAnalytics.commSuccessRate}%</p>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-[var(--surface-border)]">
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Automation starts</p>
-                  <p className="font-semibold tabular-nums">{analytics.communicationAnalytics.automationStarts}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Completed</p>
-                  <p className="font-semibold tabular-nums">{analytics.communicationAnalytics.automationCompletions}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Failed</p>
-                  <p className="font-semibold tabular-nums text-[var(--destructive)]">{analytics.communicationAnalytics.automationFailures}</p>
-                </div>
-              </div>
-            </div>
+            ) : (
+              <EmptyState icon={<Users size={16} />} title="No active clients" description="Reports appear once trainer-owned clients are active." />
+            )}
           </CardContent>
         </Card>
-      </DashboardSection>
 
-      {/* ════════════════════════════════════════════════════════
-          SECTION 6: Recent Activity
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Recent Activity"
-        description="Latest timeline events from analytics domain"
-      >
-        {analytics.timelineActivity.length > 0 ? (
-          <div className="space-y-5">
-            {analytics.timelineActivity.slice(0, 3).map((group) => (
-              <div key={group.dateKey}>
-                <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
-                  {formatDate(group.dateKey)}
-                </h3>
-                <div className="space-y-1.5">
-                  {group.events.slice(0, 5).map((ev) => (
-                    <div
-                      key={ev.eventId}
-                      className="flex items-center gap-3 py-2 px-3 rounded-lg bg-[var(--surface-raised)] border border-[var(--surface-border)]"
-                    >
-                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--surface-overlay)] shrink-0">
-                        {EVENT_ICONS[ev.eventType] ?? <Activity size={12} />}
-                      </div>
-                      <Badge
-                        variant={EVENT_VARIANTS[ev.eventType] ?? "default"}
-                        className="shrink-0 text-[10px] px-1.5 py-0.5"
-                      >
-                        {ev.label}
-                      </Badge>
-                      <span className="text-xs text-[var(--muted)] flex-1 truncate min-w-0">
-                        {ev.clientName}
-                      </span>
-                      <span className="text-[10px] text-[var(--muted)] shrink-0 tabular-nums">
-                        {formatRelativeDate(ev.timestamp)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">Weekly reports</h2>
+            <p className="text-sm text-[var(--muted)]">
+              Current week: {data.currentWeek.startDate} to {data.currentWeek.endDate}. Previous week: {data.previousWeek.startDate} to {data.previousWeek.endDate}.
+            </p>
           </div>
-        ) : (
-          <Card>
-            <CardContent className="py-8">
-              <EmptyState
-                icon={<Activity size={16} />}
-                title="No activity yet"
-                description="Events will appear once communication and meal activity begins."
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="mt-4 text-right">
-          <Link
-            href="/dashboard/events"
-            className="inline-flex items-center gap-1.5 text-xs text-brand-500 hover:text-brand-400 transition-colors"
-          >
-            View full event log
-            <ArrowRight size={12} />
-          </Link>
-        </div>
-      </DashboardSection>
-
-      {/* ════════════════════════════════════════════════════════
-          SECTION 7: Weekly Reports
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Weekly Reports"
-        description="Safe trainer-scoped weekly report history for owned clients only"
-      >
-        {weeklyReportHistory.reports.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {weeklyReportHistory.reports.map((report) => (
-              <Card key={report.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-[var(--foreground)]">
-                        {report.client_name}
-                      </h3>
-                      <p className="text-xs text-[var(--muted)]">
-                        Week of {formatDate(report.report_date)}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="shrink-0">
-                      Weekly summary
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-[var(--muted)]">Generated</p>
-                      <p className="font-medium text-[var(--foreground)]">
-                        {formatDate(report.created_at)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-[var(--muted)]">Document</p>
-                      <p className="font-medium text-[var(--foreground)]">
-                        {report.has_document ? "Stored privately" : "No document stored"}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)] mb-1">Summary</p>
-                    <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap">
-                      {report.summary || "Summary unavailable for this report."}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {data.weeklyReports.map((report) => <ReportCard key={`${report.client.id}-${report.period.key}`} report={report} />)}
           </div>
-        ) : (
-          <Card>
-            <CardContent className="py-8">
-              <EmptyState
-                icon={<Calendar size={16} />}
-                title="No weekly reports yet"
-                description="Reports will appear here after weekly generation runs."
-              />
-            </CardContent>
-          </Card>
-        )}
+          <details className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-4">
+            <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)]">Previous week reports</summary>
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {data.previousWeeklyReports.map((report) => <ReportCard key={`${report.client.id}-${report.period.key}`} report={report} />)}
+            </div>
+          </details>
+        </section>
 
-        {weeklyReportHistory.blocked_client_ids.length > 0 ? (
-          <InlineNotice variant="warning" className="mt-3">
-            Some client reports are hidden because active trainer ownership is ambiguous and cannot be proven safely yet.
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">Monthly reports</h2>
+            <p className="text-sm text-[var(--muted)]">
+              Calendar-month nutrition reports with daily and weekly breakdowns, corrected stored macros, no-log days, and rejected/merged exclusions.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {data.monthlyReports.map((report) => <ReportCard key={`${report.client.id}-${report.period.key}`} report={report} />)}
+          </div>
+          <details className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-4">
+            <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)]">Previous month reports</summary>
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {data.previousMonthlyReports.map((report) => <ReportCard key={`${report.client.id}-${report.period.key}`} report={report} />)}
+            </div>
+          </details>
+        </section>
+
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">WhatsApp report automation foundation</h2>
+            <p className="text-sm text-[var(--muted)]">
+              Default mode is dry-run. Live report delivery requires an explicit operator-approved send path and remains gated.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <AutomationPlan title="Weekly automation dry-run" items={data.automationPlan.weekly} />
+            <AutomationPlan title="Monthly automation dry-run" items={data.automationPlan.monthly} />
+          </div>
+          <InlineNotice variant="info">
+            Share buttons and automation planning do not call Meta, do not read tokens, and do not send WhatsApp messages from this page.
           </InlineNotice>
-        ) : null}
-
-        <InlineNotice variant="info" className="mt-3">
-          Weekly report history is view-only in this phase. PDF export, WhatsApp delivery visibility, and schema hardening remain future work.
-        </InlineNotice>
-      </DashboardSection>
-
-      {/* ════════════════════════════════════════════════════════
-          SECTION 8: Export Center (UI Only)
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection
-        title="Export Center"
-        description="Download reports and export data"
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="opacity-50 cursor-not-allowed">
-            <CardContent className="py-6 flex flex-col items-center text-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-[var(--surface-overlay)] flex items-center justify-center">
-                <Download size={18} className="text-[var(--muted)]" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">CSV Export</p>
-                <p className="text-xs text-[var(--muted)] mt-0.5">Download report data as CSV</p>
-              </div>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Coming soon</Badge>
-            </CardContent>
-          </Card>
-
-          <Card className="opacity-50 cursor-not-allowed">
-            <CardContent className="py-6 flex flex-col items-center text-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-[var(--surface-overlay)] flex items-center justify-center">
-                <FileText size={18} className="text-[var(--muted)]" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">PDF Export</p>
-                <p className="text-xs text-[var(--muted)] mt-0.5">Download report as PDF document</p>
-              </div>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Coming soon</Badge>
-            </CardContent>
-          </Card>
-
-          <Card className="opacity-50 cursor-not-allowed">
-            <CardContent className="py-6 flex flex-col items-center text-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-[var(--surface-overlay)] flex items-center justify-center">
-                <Calendar size={18} className="text-[var(--muted)]" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">Weekly Report</p>
-                <p className="text-xs text-[var(--muted)] mt-0.5">Scheduled weekly report delivery</p>
-              </div>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Coming soon</Badge>
-            </CardContent>
-          </Card>
-
-          <Card className="opacity-50 cursor-not-allowed">
-            <CardContent className="py-6 flex flex-col items-center text-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-[var(--surface-overlay)] flex items-center justify-center">
-                <Printer size={18} className="text-[var(--muted)]" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">Monthly Report</p>
-                <p className="text-xs text-[var(--muted)] mt-0.5">Scheduled monthly report delivery</p>
-              </div>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Coming soon</Badge>
-            </CardContent>
-          </Card>
-        </div>
-
-        <InlineNotice variant="info" className="mt-3">
-          Export features are not yet implemented. Data is available on-screen for manual recording.
-        </InlineNotice>
-      </DashboardSection>
-
-      {/* ════════════════════════════════════════════════════════
-          SECTION 9: Quick Navigation
-          ════════════════════════════════════════════════════════ */}
-      <DashboardSection title="Quick Navigation">
-        <Card>
-          <CardContent className="divide-y divide-[var(--surface-border)] py-1">
-            {quickLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="flex items-center gap-3 py-3 px-1 text-sm text-[var(--foreground)] hover:text-brand-500 transition-colors"
-              >
-                <span className="text-[var(--muted)] shrink-0">{link.icon}</span>
-                <span>{link.label}</span>
-                <ChevronRight size={14} className="ml-auto text-[var(--muted)]" />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-      </DashboardSection>
+        </section>
+      </div>
     </PageContainer>
   )
 }

@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
-import { Activity, ArrowUpRight, Bot, CheckCircle2, CircleAlert, Clock, CreditCard, LifeBuoy, MessageSquare, Shield } from "lucide-react"
+import { Activity, ArrowUpRight, Bot, CheckCircle2, CircleAlert, ClipboardCheck, Clock, CreditCard, LifeBuoy, MessageSquare, QrCode, Shield } from "lucide-react"
 import { SettingsAccountSection } from "./SettingsAccountSection"
 import { SettingsProfileForm } from "./SettingsProfileForm"
 import { getManualWabaOnboardingReadiness, type ManualWabaCredentialState } from "@/lib/waba/manual-onboarding-readiness"
@@ -184,6 +184,49 @@ export default async function SettingsPage() {
 
         <Card>
           <CardHeader>
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                <QrCode size={16} />
+              </div>
+              <div>
+                <CardTitle>Billing</CardTitle>
+                <CardDescription>
+                  Manual QR/UPI payment model for trainer pilots. No online payment gateway is connected.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
+              <div className="flex min-h-56 items-center justify-center rounded-xl border border-dashed border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-6 text-center">
+                <div className="space-y-3">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--surface-raised)] text-[var(--muted)]">
+                    <QrCode size={28} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Payment QR placeholder</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                      Payment QR will be added by the operator before launch.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <FieldValue label="Saved plan" value={subscriptionPlan} />
+                <FieldValue label="Payment method" value="Manual QR/UPI only" />
+                <FieldValue label="Verification status" value="Operator verified manually after payment proof is reviewed" />
+                <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4 text-sm leading-6 text-[var(--muted)]">
+                  <p className="font-medium text-[var(--foreground)]">Manual payment instructions</p>
+                  <p className="mt-2">No Razorpay, Stripe, card collection, or automatic payment success is active in NutriRelay.</p>
+                  <p>Do not enter a UPI PIN in NutriRelay. Complete payment only inside the trainer's UPI app, then wait for operator verification.</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle>WhatsApp Connection</CardTitle>
@@ -235,6 +278,31 @@ export default async function SettingsPage() {
                 >
                   Self-serve reconnect unavailable
                 </button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--info)]/10 text-[var(--info)]">
+                  <ClipboardCheck size={16} />
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">Meta Connect readiness</h3>
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                      Manual WABA onboarding is available now. Self-serve Meta Embedded Signup is coming later and is not claimed as working here.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <ChecklistItem done={false} label="Meta app configured" detail="External Meta dashboard setup is completed outside NutriRelay." />
+                    <ChecklistItem done={false} label="Business verification and app review" detail="Required before self-serve production onboarding can be enabled." />
+                    <ChecklistItem done={false} label="WhatsApp product and permissions ready" detail="WhatsApp Business Management and messaging permissions must be approved by Meta." />
+                    <ChecklistItem done={false} label="Production callback subscribed" detail="Webhook callback and messages field subscription are verified during real onboarding." />
+                  </div>
+                  <p className="text-xs leading-5 text-[var(--muted)]">
+                    Safe config boundary: public Meta app ID can be added later as `NEXT_PUBLIC_META_APP_ID`; server secrets such as `META_APP_SECRET` must remain server-side.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -338,6 +406,23 @@ export default async function SettingsPage() {
                 </Link>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>External Trainer Onboarding Readiness</CardTitle>
+            <CardDescription>
+              Operator-assisted path for the first trainer before self-serve WhatsApp connection is available.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <ChecklistItem done={Boolean(authUserId && readiness?.trainerProfileExists)} label="Trainer account and profile" detail="Create the trainer account, confirm profile details, then keep the trainer scoped to their own clients." />
+            <ChecklistItem done={false} label="Manual QR/UPI billing step" detail="Trainer pays through the operator-provided QR/UPI details and payment is verified manually." />
+            <ChecklistItem done={false} label="WABA details collected later" detail="phone_number_id, WABA/business account ID, approved template, and token are handled securely by the operator." />
+            <ChecklistItem done={Boolean(clientReadiness && clientReadiness.activeLinks > 0)} label="Client mapping ready" detail="Client phone numbers must be linked through active trainer_clients rows before live smoke testing." />
+            <ChecklistItem done={false} label="Live smoke checklist" detail="One outbound message, status webhook, greeting inbound, food inbound, dashboard/review visibility, and report inclusion." />
+            <ChecklistItem done label="Token handling warning" detail="Trainers must not paste Meta tokens into public browser UI; credential handling remains server-side/operator-assisted." />
           </CardContent>
         </Card>
 
