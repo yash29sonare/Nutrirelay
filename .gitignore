@@ -30,6 +30,7 @@ out/
 build/
 dist/
 .turbo/
+coverage/
 
 # Supabase local development caches
 supabase/.branches/
@@ -45,11 +46,18 @@ supabase/.temp/
 # Environments, tokens, and secrets
 # .env.example is intentionally committed — it contains key names only, no values.
 # All other .env files are ignored.
+.env
 .env*.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.production
 .env.staging
 .env.development
 .secrets
+
+# Vercel local project metadata may include org/project IDs.
+.vercel/
 
 # TypeScript build info
 tsconfig.tsbuildinfo
