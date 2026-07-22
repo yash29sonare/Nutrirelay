@@ -15,7 +15,7 @@ export function StepWelcome({ onContinue }: StepWelcomeProps) {
       </div>
 
       <h1 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)] tracking-tight">
-        Welcome to Fortress Fitness
+        Welcome to NutriRelay
       </h1>
       <p className="text-sm text-[var(--muted)] mt-3 max-w-md leading-relaxed">
         Your all-in-one platform for managing clients, automating coaching workflows,

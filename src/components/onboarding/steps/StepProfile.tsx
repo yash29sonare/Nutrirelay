@@ -70,7 +70,7 @@ export function StepProfile() {
       <FormSection title="Business Details">
         <Input
           label="Business / Coaching Brand"
-          placeholder="Fortress Fitness"
+          placeholder="Your coaching brand"
           error={errors.businessName?.message}
           {...register("businessName")}
         />

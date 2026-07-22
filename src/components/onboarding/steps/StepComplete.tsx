@@ -32,7 +32,7 @@ export function StepComplete({ data }: StepCompleteProps) {
         You&apos;re All Set!
       </h1>
       <p className="text-sm text-[var(--muted)] mt-2 max-w-md">
-        Welcome aboard{data.displayName ? `, ${data.displayName}` : ""}. Your Fortress Fitness
+        Welcome aboard{data.displayName ? `, ${data.displayName}` : ""}. Your NutriRelay
         workspace is ready.
       </p>
 
