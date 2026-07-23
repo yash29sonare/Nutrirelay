@@ -34,13 +34,6 @@ export interface OnboardingDataInput {
   businessName: string
   timezone: string
   country: string
-  coachingStyle: string
-  experienceLevel: string
-  specialties: string[]
-  languages: string[]
-  defaultAvailability: string
-  expectedClientCount: string
-  coachingGoals: string
 }
 
 export async function getTrainerProfile(authUserId: string): Promise<TrainerProfile | null> {
@@ -98,6 +91,35 @@ export async function checkTrainerReady(authUserId: string): Promise<TrainerRead
   return { exists: true, status: data.onboarding_status as 'active' | 'invited' | 'onboarding' }
 }
 
+export async function ensureTrainerRow(authUserId: string, displayName?: string): Promise<void> {
+  const db = getDb()
+
+  // 1. Ensure the profile exists with role='trainer'
+  const { error: profileError } = await db
+    .from("profiles")
+    .upsert({
+      id: authUserId,
+      role: "trainer",
+      full_name: displayName ?? null,
+    }, { onConflict: "id" })
+
+  if (profileError) {
+    throw new Error(`Failed to ensure trainer profile: ${profileError.message}`)
+  }
+
+  // 2. Ensure the trainers row exists
+  const { error: trainerError } = await db
+    .from("trainers")
+    .upsert({
+      auth_user_id: authUserId,
+      onboarding_status: "invited",
+    }, { onConflict: "auth_user_id" })
+
+  if (trainerError) {
+    throw new Error(`Failed to ensure trainer row: ${trainerError.message}`)
+  }
+}
+
 export async function requireTrainerRow(authUserId: string): Promise<TrainerProfile> {
   const profile = await getTrainerProfile(authUserId)
   if (!profile) {
@@ -113,21 +135,18 @@ export async function saveOnboardingData(authUserId: string, input: OnboardingDa
 
   await requireTrainerRow(authUserId)
 
-  await db
+  const { error } = await db
     .from("trainers")
     .update({
       business_name: input.businessName,
       timezone: input.timezone,
       country: input.country,
-      coaching_style: input.coachingStyle,
-      experience_years: input.experienceLevel,
-      specialties: JSON.stringify(input.specialties),
-      languages: JSON.stringify(input.languages),
-      default_availability: input.defaultAvailability,
-      expected_client_count: input.expectedClientCount,
-      coaching_goals: input.coachingGoals,
     })
     .eq("auth_user_id", authUserId)
+
+  if (error) {
+    throw new Error(`Failed to save onboarding data: ${error.message}`)
+  }
 }
 
 export async function completeOnboarding(authUserId: string): Promise<void> {
@@ -135,12 +154,16 @@ export async function completeOnboarding(authUserId: string): Promise<void> {
 
   await requireTrainerRow(authUserId)
 
-  await db
+  const { error } = await db
     .from("trainers")
     .update({
       onboarding_status: "active",
     })
     .eq("auth_user_id", authUserId)
+
+  if (error) {
+    throw new Error(`Failed to complete onboarding: ${error.message}`)
+  }
 
   try {
     await writeAuditLog({
