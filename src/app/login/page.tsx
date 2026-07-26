@@ -1,126 +1,69 @@
-"use client";
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
-import { Dumbbell } from "lucide-react";
+import { BrandMark } from "@/components/brand/BrandMark";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { ErrorBanner } from "@/components/ui/StatusBanner";
+import { signInWithPassword } from "./actions";
+import { PasswordInput } from "./PasswordInput";
 
-function getSupabase() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
+type LoginPageProps = {
+  searchParams?: Promise<{
+    error?: string;
+  }>;
+};
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    try {
-      const supabase = getSupabase();
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-
-      if (authError) {
-        setError(authError.message);
-        return;
-      }
-
-      router.push("/dashboard");
-      router.refresh();
-    } catch {
-      setError("An unexpected error occurred. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const error = params?.error ?? null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4">
+    <div className="login-auth-page flex min-h-screen items-center justify-center bg-[#080807] px-4 text-white [--primary:#9bdcff]">
       <div className="w-full max-w-sm space-y-8">
-        {/* Brand mark */}
         <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-brand-500">
-            <Dumbbell size={22} className="text-white" />
-          </div>
+          <BrandMark className="h-12 w-12 rounded-2xl" />
           <div className="text-center">
-            <h1 className="text-xl font-semibold text-[var(--foreground)]">
-              Fortress Fitness Pro
-            </h1>
-            <p className="text-sm text-[var(--muted)] mt-1">
-              Sign in to your trainer dashboard
+            <h1 className="text-xl font-semibold text-white">NutriRelay</h1>
+            <p className="mt-1 text-sm text-[#9aa3ad]">
+              Sign in to your nutrition operations dashboard
             </p>
           </div>
         </div>
 
-        {/* Login card */}
-        <div className="rounded-2xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-8 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            {/* Email */}
+        <div className="rounded-2xl border border-white/10 bg-[#171a22] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+          <form action={signInWithPassword} className="space-y-5" method="post" noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="email">Email address</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 autoComplete="email"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
                 placeholder="trainer@example.com"
+                className="border-white/10 bg-[#eef4ff] text-[#0b0d12] placeholder:text-[#667085] focus:border-[#9bdcff] focus:ring-[#9bdcff]"
               />
             </div>
 
-            {/* Password */}
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-                placeholder="••••••••"
-              />
+              <PasswordInput />
             </div>
 
-            {/* Error block */}
-            {error && (
-              <ErrorBanner>{error}</ErrorBanner>
-            )}
+            {error && <ErrorBanner>{error}</ErrorBanner>}
 
-            {/* Submit */}
             <Button
               type="submit"
               variant="brand"
               size="lg"
-              disabled={loading || !email || !password}
-              loading={loading}
-              className="w-full"
+              className="w-full border-white bg-white text-[#080807] hover:bg-[#dfe7ee] hover:text-[#080807]"
             >
-              {loading ? "Signing in…" : "Sign in"}
+              Sign in
             </Button>
           </form>
         </div>
 
-        <p className="text-center text-xs text-[var(--muted)]">
-          Fortress Fitness Pro · Trainer access only
+        <p className="text-center text-xs text-[#9aa3ad]">
+          Nutrition coaching platform · Trainer access only
         </p>
       </div>
     </div>
