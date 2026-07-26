@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fortress Fitness",
-  description: "Trainer platform for client management, AI-powered coaching, and business operations",
+  title: "NutriRelay",
+  description: "Nutrition coaching operations platform with WhatsApp-based meal logging and adherence workflows",
 };
 
 export default function RootLayout({
