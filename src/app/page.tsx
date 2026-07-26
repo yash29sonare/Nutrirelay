@@ -37,7 +37,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-500">
             <Dumbbell size={16} className="text-white" />
           </div>
-          <span className="font-semibold text-sm text-[var(--foreground)]">Fortress Fitness</span>
+          <span className="font-semibold text-sm text-[var(--foreground)]">NutriRelay</span>
         </div>
         <div className="flex items-center gap-3">
           <Link
@@ -65,7 +65,7 @@ export default function LandingPage() {
             <span className="text-brand-500"> AI-powered coaching</span>
           </h1>
           <p className="mt-4 text-lg text-[var(--muted)] max-w-lg mx-auto leading-relaxed">
-            Fortress Fitness gives trainers the tools to track meals, automate follow-ups, and keep every client on track — all from one dashboard.
+            NutriRelay gives trainers the tools to track meals, automate follow-ups, and keep every client on track — all from one dashboard.
           </p>
           <div className="flex items-center justify-center gap-4 mt-8">
             <Link
@@ -103,7 +103,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-[var(--surface-border)] py-6 px-6">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <p className="text-xs text-[var(--muted)]">Fortress Fitness Pro</p>
+          <p className="text-xs text-[var(--muted)]">NutriRelay</p>
           <p className="text-xs text-[var(--muted)]">Trainer platform</p>
         </div>
       </footer>

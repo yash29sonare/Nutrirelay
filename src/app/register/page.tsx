@@ -106,7 +106,7 @@ export default function RegisterPage() {
               Create your account
             </h1>
             <p className="text-sm text-[var(--muted)] mt-1">
-              Start managing your clients with Fortress
+              Start managing your clients with NutriRelay
             </p>
           </div>
         </div>
