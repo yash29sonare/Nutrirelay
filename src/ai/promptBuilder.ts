@@ -7,7 +7,7 @@ export interface BuildPromptInput {
 }
 
 const DESIGN_SYSTEM_CONSTRAINTS = `\
-## Fortress Fitness Design System Constraints
+## NutriRelay Design System Constraints
 
 ### Phase 8.0 — Design Token Rules
 - Use CSS custom properties (var(--background), var(--foreground), var(--muted), var(--surface-raised), var(--surface-overlay), var(--surface-border))
@@ -50,7 +50,7 @@ const DESIGN_SYSTEM_CONSTRAINTS = `\
 - NO inline styles for layout`;
 
 const ARCHITECTURE_CONTEXT = `\
-## Fortress Fitness Architecture
+## NutriRelay Architecture
 
 ### Stack
 - Next.js 16.2.7 (App Router, Turbopack)
@@ -98,7 +98,7 @@ export function enforcePromptSchema(prompt: string): {
 } {
   const errors: string[] = [];
   const required = [
-    "Fortress Fitness Architecture",
+    "NutriRelay Architecture",
     "Stack",
     "Design System Constraints",
     "Phase 8.0",

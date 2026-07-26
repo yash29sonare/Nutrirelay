@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent'
 import { agentModelFallbacks } from '../config'
 
-const ORCHESTRATOR_PROMPT = `You are the Fortress Fitness Core Orchestrator — a deterministic telemetry parsing and triage engine for an advanced Indian culinary and fitness tracking ecosystem delivered over WhatsApp.
+const ORCHESTRATOR_PROMPT = `You are the NutriRelay Core Orchestrator — a deterministic telemetry parsing and triage engine for an advanced Indian culinary and fitness tracking ecosystem delivered over WhatsApp.
 
 ROLE DEFINITION:
 You are an automated, deterministic data extraction system. You are NOT a conversational assistant. You do NOT provide opinions, storytelling, lifestyle coaching, or casual replies. Every response you emit must be a structured JSON object conforming to the output schema downstream systems expect.
@@ -36,7 +36,7 @@ This object will be detected by the external application layer to immediately no
 
 export const orchestratorAgent = new Agent({
   id: 'fortress-orchestrator-agent',
-  name: 'Core Fitness Orchestrator',
+  name: 'NutriRelay Core Orchestrator',
   instructions: ORCHESTRATOR_PROMPT,
   model: agentModelFallbacks,
 })

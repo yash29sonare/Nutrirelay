@@ -327,7 +327,7 @@ function buildReportLines(
   narrative: string
 ): PdfLine[] {
   const lines: PdfLine[] = [
-    { text: "Fortress Fitness Pro", size: 20, bold: true, gap: 0 },
+    { text: "NutriRelay", size: 20, bold: true, gap: 0 },
     { text: "Weekly Performance Report", size: 13, bold: true, gap: 1 },
     { text: `Client: ${clientName}`, size: 11 },
     { text: `Week: ${weekStart}  to  ${weekEnd}`, size: 11, gap: 1 },
@@ -347,7 +347,7 @@ function buildReportLines(
     lines.push({ text: "", size: 11 });
   }
 
-  lines.push({ text: "Powered by Fortress Fitness Pro", size: 9 });
+  lines.push({ text: "Powered by NutriRelay", size: 9 });
   return lines;
 }
 
@@ -469,7 +469,7 @@ export async function generateWeeklyReports(): Promise<WeeklyReportSummary> {
               trainerId,
               String(profile.phone_number),
               signed.signedUrl,
-              `Fortress-Weekly-${weekStartDate}.pdf`,
+              `NutriRelay-Weekly-${weekStartDate}.pdf`,
               `Your weekly performance report (${weekStartDate} to ${weekEndDate}) 📊`
             );
             summary.sent++;

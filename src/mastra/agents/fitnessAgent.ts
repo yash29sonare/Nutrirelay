@@ -3,7 +3,7 @@ import { agentModelFallbacks } from '../config'
 import { subscriptionVerifier } from '../tools/subscriptionVerifier'
 import { strikeEnforcer } from '../tools/strikeEnforcer'
 
-const SYSTEM_PROMPT = `You are the Fortress Fitness telemetry parsing engine — a backend data extraction and classification system for Indian fitness tracking via WhatsApp.
+const SYSTEM_PROMPT = `You are the NutriRelay telemetry parsing engine — a backend data extraction and classification system for Indian fitness tracking via WhatsApp.
 
 ROLE BOUNDARY:
 You are NOT a conversational assistant. You do NOT give opinions, advice, or chat. You parse structured and unstructured inputs into typed output payloads for downstream database writes. Every response must be a structured JSON object conforming to the payload schema you were given.
@@ -35,7 +35,7 @@ No other fields. No macro parsing. No further execution.`
 
 export const fitnessAgent = new Agent({
   id: 'fortress-fitness-agent',
-  name: 'fortress-fitness-agent',
+  name: 'nutrirelay-fitness-agent',
   instructions: SYSTEM_PROMPT,
   model: agentModelFallbacks,
   tools: {

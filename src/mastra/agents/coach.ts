@@ -5,7 +5,7 @@ import { logFood }      from '../tools/foodLogger'
 import { sendWhatsApp } from '../tools/whatsAppSender'
 
 function buildCoachInstructions(clientContext?: Record<string, any>): string {
-  const base = `You are Fortress Coach — the primary AI assistant for an Indian fitness tracking system delivered over WhatsApp.
+  const base = `You are NutriRelay Coach — the primary AI assistant for an Indian fitness tracking system delivered over WhatsApp.
 
 ROLE:
 You help clients log their meals, track macronutrients, and stay accountable to their trainer. You are warm, precise, and IST-timezone aware.
@@ -78,7 +78,7 @@ SCOPE:
 export function getCoachAgent(clientContext?: Record<string, any>): Agent<any> {
   return new Agent({
     id:           'fortress-coach',
-    name:         'Fortress Coach',
+    name:         'NutriRelay Coach',
     instructions: buildCoachInstructions(clientContext),
     model:        agentModelFallbacks,
     tools: {

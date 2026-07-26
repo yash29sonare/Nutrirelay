@@ -2,7 +2,7 @@
  * getTrainerWaba — Per-trainer WABA credential resolver.
  *
  * WHY GLOBAL WHATSAPP CREDENTIALS ARE FORBIDDEN:
- * Fortress Fitness is a multi-tenant SaaS. Each trainer is a separate tenant
+ * NutriRelay is a multi-tenant SaaS. Each trainer is a separate tenant
  * who owns their own WhatsApp Business Account (WABA). Using a single global
  * WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID environment variable would
  * mean every trainer's AI messages are sent from the same WhatsApp number,
