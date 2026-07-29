@@ -1,15 +1,9 @@
 import {
   LayoutDashboard,
   Users,
-  Zap,
   MessageSquare,
-  Mic,
-  MessageCircle,
-  Bot,
   BarChart3,
   FileText,
-  CreditCard,
-  Activity,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -32,47 +26,18 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Main",
     items: [
-      { label: "Overview", href: "/dashboard", icon: LayoutDashboard, description: "Command center and daily client overview." },
-      { label: "Engagement", href: "/dashboard/engagement", icon: Zap, description: "Review follow-up actions and client adherence signals." },
-      { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, description: "See nutrition, compliance, and communication performance trends." },
-    ],
-  },
-  {
-    title: "Training",
-    items: [
-      { label: "Clients", href: "/dashboard/clients", icon: Users, description: "Manage client nutrition progress and program details." },
-    ],
-  },
-  {
-    title: "Communication",
-    items: [
-      { label: "Communications", href: "/dashboard/communications", icon: MessageSquare, description: "Track queued, sent, and failed outreach." },
-      { label: "Conversations", href: "/dashboard/conversations", icon: MessageCircle, description: "Review planned client conversations and follow-ups." },
-      { label: "Voice Notes", href: "/dashboard/voice-notes", icon: Mic, description: "Recover failed voice-note transcriptions." },
-    ],
-  },
-  {
-    title: "Operations",
-    items: [
-      { label: "Automations", href: "/dashboard/automations", icon: Bot, description: "Control meal nudges, ghosting checks, reports, and photo verification." },
-      { label: "Reports", href: "/dashboard/reports", icon: FileText, description: "Open trainer-facing nutrition and operations reports." },
-      { label: "Queue", href: "/dashboard/queue", icon: CreditCard, description: "Owner-only payment approval queue." },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { label: "Events", href: "/dashboard/events", icon: Activity, description: "Audit operational events and background activity." },
-      { label: "Settings", href: "/dashboard/settings", icon: Settings, description: "Account, support, and platform settings." },
+      { label: "Overview", href: "/dashboard", icon: LayoutDashboard, description: "See today’s client activity and attention items." },
+      { label: "Clients", href: "/dashboard/clients", icon: Users, description: "Review trainer-owned client progress and profiles." },
+      { label: "Inbox", href: "/dashboard/communications", icon: MessageSquare, description: "Review WhatsApp replies, media, voice notes, and follow-ups." },
+      { label: "Reports", href: "/dashboard/reports", icon: FileText, description: "Prepare weekly and monthly client progress reports." },
+      { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, description: "Review actionable nutrition and communication metrics." },
+      { label: "Settings", href: "/dashboard/settings", icon: Settings, description: "Manage account, WhatsApp, and automation preferences." },
     ],
   },
 ];
 
-export function getNavSections(isAdmin: boolean): NavSection[] {
-  return NAV_SECTIONS.map((section) => ({
-    ...section,
-    items: section.items.filter((item) => isAdmin || item.href !== "/dashboard/queue"),
-  })).filter((section) => section.items.length > 0);
+export function getNavSections(_isAdmin: boolean): NavSection[] {
+  return NAV_SECTIONS;
 }
 
 export function getFlatNavItems(): NavItem[] {

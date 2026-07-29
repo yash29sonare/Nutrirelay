@@ -12,27 +12,33 @@ import { formatDateTime } from "@/lib/format"
 
 const AUTOMATION_GROUPS = [
   {
-    title: "Client follow-up",
+    title: "Meal reminder preparation",
     description:
-      "Meal nudges, ghosting checks, and renewal reminders prepare outreach when logging slows down or subscriptions are close to expiry.",
+      "Prepares a reminder for trainer review when a client misses an expected meal log.",
     icon: MessageSquare,
   },
   {
-    title: "Scheduling",
+    title: "Missed-check-in follow-up preparation",
     description:
-      "The scheduler plans reminders and conversation drafts, then dispatches approved communication runs through the existing engagement pipeline.",
+      "Prepares a follow-up when client logging or check-in activity stalls.",
     icon: Clock,
   },
   {
-    title: "Reporting",
+    title: "Weekly report preparation",
     description:
-      "Weekly reports, monthly projections, and compliance refresh jobs generate trainer-facing insights from food logs and active goals.",
+      "Builds weekly nutrition summaries from trainer-owned food logs and goals.",
     icon: Bot,
   },
   {
-    title: "System upkeep",
+    title: "Monthly report preparation",
     description:
-      "Background storage pruning keeps transient operational tables from growing without bound.",
+      "Builds a monthly progress view with compact weekly breakdowns.",
+    icon: Bot,
+  },
+  {
+    title: "Photo / voice review queue",
+    description:
+      "Surfaces image review items and failed voice-note transcriptions in Inbox.",
     icon: Shield,
   },
 ] as const
@@ -99,8 +105,8 @@ const SUPPORT_LINKS = [
     icon: Activity,
   },
   {
-    title: "Communications",
-    description: "Review pending conversations, reminders, and message delivery failures.",
+    title: "Inbox",
+    description: "Review client replies, media, voice notes, follow-ups, and delivery failures.",
     href: "/dashboard/communications",
     icon: MessageSquare,
   },
@@ -426,41 +432,39 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Automation Coverage</CardTitle>
-            <CardDescription>
-              These background automations are live server-side. When you change settings in the automation workspace, future runs pick up the updated configuration automatically.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {AUTOMATION_GROUPS.map(({ title, description, icon: Icon }) => (
-              <div
-                key={title}
-                className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-4"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
-                    <Icon size={16} />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-semibold text-[var(--foreground)]">{title}</h3>
-                    <p className="text-xs leading-5 text-[var(--muted)]">{description}</p>
+        <div id="automation-preferences" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Automation preferences</CardTitle>
+              <CardDescription>
+                See which preparation workflows support your client work. Live WhatsApp sending still requires operator approval.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {AUTOMATION_GROUPS.map(({ title, description, icon: Icon }) => (
+                <div
+                  key={title}
+                  className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                      <Icon size={16} />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold text-[var(--foreground)]">{title}</h3>
+                      <p className="text-xs leading-5 text-[var(--muted)]">{description}</p>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </CardContent>
+            <CardContent className="pt-0">
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+                Preparation only. Live WhatsApp sending requires operator approval.
               </div>
-            ))}
-          </CardContent>
-          <CardContent className="pt-0">
-            <Link
-              href="/dashboard/automations"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 transition-colors hover:text-brand-500 dark:text-brand-400"
-            >
-              Open automation workspace
-              <ArrowUpRight size={14} />
-            </Link>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card>
           <CardHeader>
@@ -495,7 +499,7 @@ export default async function SettingsPage() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-[var(--foreground)]">What to check first</p>
                   <p className="text-xs leading-5 text-[var(--muted)]">
-                    Use Events for job history, Communications for queued or failed outreach, and the account section above for plan and WhatsApp connection status.
+                    Use Events for internal job history, Inbox for client replies and failed outreach, and the account section above for plan and WhatsApp connection status.
                   </p>
                 </div>
               </div>

@@ -1,21 +1,18 @@
 import Link from "next/link"
 import {
-  Users, AlertTriangle, TrendingUp, Activity, Zap,
-  ChevronRight, Mic, CreditCard,
+  AlertTriangle,
+  ChevronRight,
+  ClipboardCheck,
+  FileCheck2,
+  Salad,
+  Users,
 } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
-import { DashboardGrid } from "@/components/layout/DashboardGrid"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
 import { DashboardSection } from "@/components/layout/DashboardSection"
-import { StatCard } from "@/components/dashboard/StatCard"
-import { InsightsPanel } from "./components/InsightsPanel"
-import { EngagementFeed } from "./components/EngagementFeed"
-import { formatPercent, formatRelativeDate } from "@/lib/format"
-import { getClientRiskLevel } from "@/lib/domain/dashboardSemantics"
+import { formatRelativeDate } from "@/lib/format"
+import type { ClientSummaryCard } from "@/lib/dashboard-reads"
 import type { DashboardDataDTO } from "@/types/dashboard"
-import type { DashboardInsights } from "@/types/dashboard-insights"
-import type { TrainerDailyFeed } from "@/types/engagement"
-import type { EngagementEvent } from "@/types/engagement-events"
 
 function getGreeting(): string {
   const hour = new Date().getHours()
@@ -33,336 +30,185 @@ function formatCurrentDate(): string {
   })
 }
 
-const EVENT_LABELS: Record<string, string> = {
-  ACTION_CREATED: "Action Created",
-  ACTION_COMPLETED: "Completed",
-  ACTION_IGNORED: "Ignored",
-  ACTION_SNOOZED: "Snoozed",
-  TRAINER_NOTE_ADDED: "Note Added",
-  CLIENT_STATE_UPDATED: "State Updated",
-  ACTION_SUPPRESSED: "Suppressed",
-}
-
-interface QuickActionCardProps {
-  href: string
-  icon: React.ReactNode
-  title: string
-  description: string
-  iconBg: string
-  iconColor: string
-}
-
-function QuickActionCard({ href, icon, title, description, iconBg, iconColor }: QuickActionCardProps) {
-  return (
-    <Link href={href} className="block group">
-      <Card className="hover:bg-[var(--surface-overlay)] transition-colors duration-100 h-full">
-        <CardContent className="flex items-start gap-4 py-5">
-          <div className={`flex items-center justify-center w-10 h-10 rounded-xl shrink-0 ${iconBg} ${iconColor}`}>
-            {icon}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[var(--foreground)] group-hover:text-brand-500 transition-colors">
-              {title}
-            </p>
-            <p className="text-xs text-[var(--muted)] mt-0.5">{description}</p>
-          </div>
-          <ChevronRight size={14} className="text-[var(--muted)] shrink-0 mt-1" />
-        </CardContent>
-      </Card>
-    </Link>
-  )
+function formatGoal(goal: string | null | undefined) {
+  if (!goal) return "Goal not added"
+  return goal.replaceAll("_", " ").toLowerCase()
 }
 
 interface WorkspaceDashboardProps {
   data: DashboardDataDTO
-  insights: DashboardInsights
-  feed: TrainerDailyFeed
-  events: EngagementEvent[]
+  clientSummaries: ClientSummaryCard[]
+  reportsReady: number | null
   userName: string | null
 }
 
 export function WorkspaceDashboard({
   data,
-  insights,
-  feed,
-  events,
+  clientSummaries,
+  reportsReady,
   userName,
 }: WorkspaceDashboardProps) {
   const displayName = userName ?? data.trainer.business_name ?? "Trainer"
-  const totalActions = feed.highPriority.length + feed.mediumPriority.length + feed.lowPriority.length
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  const summaryByClient = new Map(clientSummaries.map((client) => [client.client_id, client]))
+  const attentionClients = data.clients.filter(
+    (client) => client.active_strike_count > 0 || client.total_meals_logged_today === 0,
   )
-  const latestEvents = sortedEvents.slice(0, 5)
+  const mealsToday = data.clients.reduce((total, client) => total + client.total_meals_logged_today, 0)
+  const noLogCount = data.clients.filter((client) => client.total_meals_logged_today === 0).length
+
+  const todayCards = [
+    { label: "Active clients", value: data.metrics.activeClients, icon: Users, tone: "text-sky-600 bg-sky-500/10" },
+    { label: "Need attention", value: attentionClients.length, icon: AlertTriangle, tone: "text-amber-600 bg-amber-500/10" },
+    { label: "Meals logged today", value: mealsToday, icon: Salad, tone: "text-emerald-600 bg-emerald-500/10" },
+    ...(reportsReady === null
+      ? []
+      : [{ label: "Weekly reports ready", value: reportsReady, icon: FileCheck2, tone: "text-violet-600 bg-violet-500/10" }]),
+  ]
 
   return (
-    <div className="space-y-6">
-      {/* ── 1. Welcome Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--foreground)] tracking-tight">
-            {getGreeting()}, {displayName}
-          </h1>
-          <p className="text-sm text-[var(--muted)] mt-1">{formatCurrentDate()}</p>
-          {data.trainer.business_name && (
-            <p className="text-xs text-[var(--muted)] mt-0.5">{data.trainer.business_name}</p>
-          )}
-        </div>
-      </div>
+    <div className="space-y-7">
+      <header>
+        <p className="text-sm text-[var(--muted)]">{formatCurrentDate()}</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
+          {getGreeting()}, {displayName}
+        </h1>
+        <p className="mt-2 text-sm text-[var(--muted)]">Here is what needs your attention today.</p>
+      </header>
 
-      {/* ── 2. KPI Overview ── */}
-      <DashboardSection title="KPI Overview">
-        <DashboardGrid columns={4}>
-          <StatCard
-            icon={<Users size={18} />}
-            value={data.metrics.activeClients}
-            label="Active clients"
-            iconBg="bg-brand-500/10"
-            iconColor="text-brand-500"
-          />
-          <StatCard
-            icon={<TrendingUp size={18} />}
-            value={formatPercent(data.metrics.complianceRate)}
-            label="Compliance rate"
-            iconBg="bg-[var(--success)]/10"
-            iconColor="text-[var(--success)]"
-          />
-          <StatCard
-            icon={<Activity size={18} />}
-            value={formatPercent(data.metrics.weeklyProgress)}
-            label="Weekly progress"
-            iconBg="bg-sky-500/10"
-            iconColor="text-sky-500"
-          />
-          <StatCard
-            icon={<AlertTriangle size={18} />}
-            value={data.metrics.atRiskClients}
-            label="At-risk clients"
-            iconBg="bg-red-500/10"
-            iconColor="text-red-500"
-          />
-        </DashboardGrid>
+      <section aria-labelledby="today-summary">
+        <h2 id="today-summary" className="sr-only">Today summary</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {todayCards.map(({ label, value, icon: Icon, tone }) => (
+            <Card key={label}>
+              <CardContent className="flex items-center gap-3 py-4">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone}`}>
+                  <Icon size={16} />
+                </div>
+                <div>
+                  <p className="text-xl font-semibold tabular-nums text-[var(--foreground)]">{value}</p>
+                  <p className="text-xs text-[var(--muted)]">{label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <DashboardSection title="Coaching insights">
+        <div className="grid gap-3 md:grid-cols-3">
+          <Card>
+            <CardContent className="py-4">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {noLogCount === 0
+                  ? "Every active client has logged a meal today."
+                  : `${noLogCount} client${noLogCount === 1 ? " has" : "s have"} not logged meals today.`}
+              </p>
+              <p className="mt-1 text-xs text-[var(--muted)]">Based on today’s trainer-owned food logs.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-4">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {data.metrics.atRiskClients === 0
+                  ? "No clients have active risk strikes."
+                  : `${data.metrics.atRiskClients} client${data.metrics.atRiskClients === 1 ? " has" : "s have"} active risk indicators.`}
+              </p>
+              <p className="mt-1 text-xs text-[var(--muted)]">Open the attention feed for the affected client.</p>
+            </CardContent>
+          </Card>
+          {reportsReady !== null ? (
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {reportsReady === 0
+                    ? "No weekly client reports have data yet."
+                    : `${reportsReady} weekly report${reportsReady === 1 ? " is" : "s are"} ready to preview.`}
+                </p>
+                <Link href="/dashboard/reports" className="mt-1 inline-flex text-xs font-medium text-brand-500 hover:text-brand-600">
+                  Open reports
+                </Link>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
       </DashboardSection>
 
-      {/* ── 3. AI Coach Summary ── */}
-      <InsightsPanel insights={insights} />
-
-      {/* ── 4. Today's Engagement Queue ── */}
-      {totalActions > 0 ? (
-        <EngagementFeed feed={feed} />
-      ) : (
-        <DashboardSection title="Action feed">
-          <Card>
-            <CardContent className="py-8 text-center">
-              <p className="text-sm text-[var(--muted)]">
-                No pending actions — everything is on track.
-              </p>
-            </CardContent>
-          </Card>
-        </DashboardSection>
-      )}
-
-      {/* ── 5. Client Snapshot + 6. Performance Trend ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Client Snapshot */}
-        <DashboardSection title="Client Snapshot">
-          <Card>
-            {data.clients.length > 0 ? (
-              <div className="divide-y divide-[var(--surface-border)]">
-                {data.clients.slice(0, 5).map((client) => {
-                  const riskLevel = getClientRiskLevel(client)
-                  return (
-                    <Link
-                      key={client.client_id}
-                      href={`/dashboard/clients/${client.client_id}`}
-                      className="flex items-center gap-3 px-5 py-3 hover:bg-[var(--surface-overlay)] transition-colors duration-100"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                          {client.client_name}
-                        </p>
-                        <p className="text-xs text-[var(--muted)] mt-0.5">
-                          {client.total_meals_logged_today} meal{client.total_meals_logged_today !== 1 ? "s" : ""} today · {client.total_calories_today} kcal
-                        </p>
-                      </div>
-                      <Badge
-                        variant={
-                          riskLevel === "high"
-                            ? "danger"
-                            : riskLevel === "medium"
-                              ? "warning"
-                              : client.total_meals_logged_today > 0
-                                ? "success"
-                                : "default"
-                        }
-                      >
-                        {riskLevel === "high"
-                          ? `${client.active_strike_count} strikes`
-                          : riskLevel === "medium"
-                            ? "1 strike"
-                            : client.total_meals_logged_today > 0
-                              ? "On track"
-                              : "No meals"}
-                      </Badge>
-                      <ChevronRight size={14} className="text-[var(--muted)] shrink-0" />
-                    </Link>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="py-8 text-center">
-                <p className="text-sm text-[var(--muted)]">No clients yet.</p>
-              </div>
-            )}
-            {data.clients.length > 5 && (
-              <div className="px-5 py-3 border-t border-[var(--surface-border)]">
-                <Link
-                  href="/dashboard/clients"
-                  className="text-xs text-brand-500 hover:text-brand-600 font-medium"
-                >
-                  View all {data.clients.length} clients →
-                </Link>
-              </div>
-            )}
-          </Card>
-        </DashboardSection>
-
-        {/* Performance Trend */}
-        <DashboardSection title="Performance Trend">
-          <Card>
-            <CardContent className="py-5">
-              {data.trends.complianceOverTime.length > 0 ? (
-                <div className="space-y-2">
-                  {data.trends.complianceOverTime.slice(-7).map((entry) => {
-                    const pct = Math.min(100, Math.max(0, entry.compliance_rate))
-                    const label = new Date(entry.date).toLocaleDateString("en-IN", {
-                      weekday: "short",
-                      day: "numeric",
-                    })
-                    return (
-                      <div key={entry.date} className="flex items-center gap-3">
-                        <span className="text-xs text-[var(--muted)] w-16 shrink-0">{label}</span>
-                        <div className="flex-1 h-5 rounded-md bg-[var(--surface-border)] overflow-hidden">
-                          <div
-                            className="h-full rounded-md transition-all duration-500"
-                            style={{
-                              width: `${pct}%`,
-                              backgroundColor: pct >= 70
-                                ? "var(--success)"
-                                : pct >= 40
-                                  ? "var(--warning)"
-                                  : "var(--destructive)",
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs text-[var(--foreground)] tabular-nums w-10 text-right">
-                          {Math.round(pct)}%
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-[var(--muted)] text-center py-6">
-                  No compliance data available yet.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </DashboardSection>
-      </div>
-
-      {/* ── 7. Recent Events ── */}
-      <DashboardSection title="Recent Events">
+      <DashboardSection title="Attention feed">
         <Card>
-          {latestEvents.length > 0 ? (
+          {attentionClients.length > 0 ? (
             <div className="divide-y divide-[var(--surface-border)]">
-              {latestEvents.map((event) => (
-                <div key={event.id} className="flex items-center gap-3 px-5 py-2.5 text-sm">
-                  <span className="text-xs text-[var(--muted)] font-mono w-28 shrink-0">
-                    {formatRelativeDate(event.created_at)}
-                  </span>
-                  <Badge
-                    variant={
-                      event.event_type === "ACTION_CREATED"
-                        ? "brand"
-                        : event.event_type === "ACTION_COMPLETED"
-                          ? "success"
-                          : "default"
-                    }
+              {attentionClients.map((client) => {
+                const reasons = [
+                  client.total_meals_logged_today === 0 ? "No meals logged today" : null,
+                  client.active_strike_count > 0
+                    ? `${client.active_strike_count} active risk strike${client.active_strike_count === 1 ? "" : "s"}`
+                    : null,
+                ].filter((reason): reason is string => Boolean(reason))
+
+                return (
+                  <Link
+                    key={client.client_id}
+                    href={`/dashboard/clients/${client.client_id}`}
+                    className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-overlay)]"
                   >
-                    {EVENT_LABELS[event.event_type] ?? event.event_type}
-                  </Badge>
-                  {event.payload && typeof event.payload === "object" && "reason" in event.payload && (
-                    <span className="text-xs text-[var(--muted)] truncate">
-                      {String(event.payload.reason)}
-                    </span>
-                  )}
-                </div>
-              ))}
+                    <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-[var(--foreground)]">{client.client_name}</p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">{reasons.join(" · ")}</p>
+                    </div>
+                    <Badge variant="warning">Review</Badge>
+                    <ChevronRight size={14} className="shrink-0 text-[var(--muted)]" />
+                  </Link>
+                )
+              })}
             </div>
           ) : (
-            <div className="py-8 text-center">
-              <p className="text-sm text-[var(--muted)]">No events recorded yet.</p>
-            </div>
-          )}
-          {events.length > 5 && (
-            <div className="px-5 py-3 border-t border-[var(--surface-border)]">
-              <Link
-                href="/dashboard/events"
-                className="text-xs text-brand-500 hover:text-brand-600 font-medium"
-              >
-                View all {events.length} events →
-              </Link>
-            </div>
+            <CardContent className="flex items-center gap-3 py-7">
+              <ClipboardCheck size={18} className="text-emerald-500" />
+              <div>
+                <p className="text-sm font-medium text-[var(--foreground)]">No clients need attention right now.</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">New missed logs and risk indicators will appear here.</p>
+              </div>
+            </CardContent>
           )}
         </Card>
       </DashboardSection>
 
-      {/* ── 8. Quick Actions ── */}
-      <DashboardSection title="Quick Actions">
-        <DashboardGrid columns={3}>
-          <QuickActionCard
-            href="/dashboard/clients"
-            icon={<Users size={20} />}
-            title="Clients"
-            description="View and manage your client roster"
-            iconBg="bg-brand-500/10"
-            iconColor="text-brand-500"
-          />
-          <QuickActionCard
-            href="/dashboard/engagement"
-            icon={<Zap size={20} />}
-            title="Engagement"
-            description="Review AI-powered action recommendations"
-            iconBg="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
-          <QuickActionCard
-            href="/dashboard/events"
-            icon={<Activity size={20} />}
-            title="Events"
-            description="Immutable event log for auditing"
-            iconBg="bg-sky-500/10"
-            iconColor="text-sky-500"
-          />
-          <QuickActionCard
-            href="/dashboard/voice-notes"
-            icon={<Mic size={20} />}
-            title="Voice Notes"
-            description="Recover failed voice note transcriptions"
-            iconBg="bg-purple-500/10"
-            iconColor="text-purple-500"
-          />
-          <QuickActionCard
-            href="/dashboard/queue"
-            icon={<CreditCard size={20} />}
-            title="Payment Queue"
-            description="Approve or reject pending UPI payments"
-            iconBg="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
-        </DashboardGrid>
+      <DashboardSection title="Client snapshot">
+        <Card>
+          {data.clients.length > 0 ? (
+            <div className="divide-y divide-[var(--surface-border)]">
+              {data.clients.slice(0, 8).map((client) => {
+                const summary = summaryByClient.get(client.client_id)
+                const needsAttention = attentionClients.some((item) => item.client_id === client.client_id)
+                return (
+                  <Link
+                    key={client.client_id}
+                    href={`/dashboard/clients/${client.client_id}`}
+                    className="grid gap-2 px-5 py-4 transition-colors hover:bg-[var(--surface-overlay)] sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_auto] sm:items-center"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">{client.client_name}</p>
+                      <p className="mt-0.5 text-xs capitalize text-[var(--muted)]">{formatGoal(summary?.goal_type)}</p>
+                    </div>
+                    <p className="text-xs text-[var(--muted)]">
+                      {client.total_meals_logged_today} meal{client.total_meals_logged_today === 1 ? "" : "s"} today
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {summary?.last_logged ? formatRelativeDate(summary.last_logged) : "No activity today"}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {needsAttention ? <Badge variant="warning">Attention</Badge> : <Badge variant="success">On track</Badge>}
+                      <ChevronRight size={14} className="text-[var(--muted)]" />
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          ) : (
+            <CardContent className="py-8 text-center text-sm text-[var(--muted)]">No active clients yet.</CardContent>
+          )}
+        </Card>
       </DashboardSection>
     </div>
   )

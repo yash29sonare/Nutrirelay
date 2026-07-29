@@ -13,6 +13,8 @@ import { getEvents, appendEvents } from "@/lib/events/engagementEventStore";
 import { getActionKey } from "@/lib/engagement/actionKey";
 import { computeOutcomeFromEvents } from "@/lib/outcomes/eventOutcomeEngine";
 import { generateInsightsFromEvents } from "@/lib/ai/engagementAI";
+import { getTrainerClientSummaries } from "@/lib/dashboard-reads";
+import { getTrainerReportsCenterData } from "@/lib/reports/report-center";
 
 function EmptyRoster({ message }: { message: string }) {
   return (
@@ -67,7 +69,11 @@ export default async function DashboardPage() {
   const insights = generateDashboardInsights(dto);
 
   // ── Engagement event pipeline ─────────────────────────────────
-  const events = await getEvents(authUserId);
+  const [events, clientSummaries, reportsCenter] = await Promise.all([
+    getEvents(authUserId),
+    getTrainerClientSummaries(authUserId).catch(() => []),
+    getTrainerReportsCenterData(authUserId).catch(() => null),
+  ]);
   const projection = buildEngagementState(events);
   const runtimeActions = generateActionQueue(dto, insights);
   const filtered = filterByProjection(runtimeActions, projection, authUserId);
@@ -91,19 +97,21 @@ export default async function DashboardPage() {
     await appendEvents(authUserId, eventInputs);
   }
 
-  const feed = getTrainerDailyFeed(filtered);
+  getTrainerDailyFeed(filtered);
   computeOutcomeFromEvents(events);
   generateInsightsFromEvents(events);
 
   const userName = (user?.user_metadata?.display_name as string) ?? null;
+  const reportsReady = reportsCenter
+    ? reportsCenter.weeklyReports.filter((report) => report.status !== "no_data").length
+    : null;
 
   return (
     <PageContainer>
       <WorkspaceDashboard
         data={dto}
-        insights={insights}
-        feed={feed}
-        events={events}
+        clientSummaries={clientSummaries}
+        reportsReady={reportsReady}
         userName={userName}
       />
     </PageContainer>
