@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState"
 import { ErrorState } from "@/components/ui/ErrorState"
 import { InlineNotice } from "@/components/ui/InlineNotice"
 import {
-  ArrowLeft, AlertTriangle, CalendarClock, CheckCheck, Dumbbell, Goal, History, MessageSquare,
+  ArrowLeft, AlertTriangle, CalendarClock, CheckCheck, ChevronLeft, ChevronRight, Dumbbell, Goal, History, MessageSquare,
 } from "lucide-react"
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getClientById } from "@/lib/operations/clients"
@@ -28,6 +28,7 @@ import type { MealRecord } from "@/types/meal"
 import type { TimelineEntry } from "@/types/timeline"
 import { ClientTimeline } from "./components/ClientTimeline"
 import { MealHistory } from "./components/MealHistory"
+import { ClientNameEditor } from "./components/ClientNameEditor"
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
 import { buildTimeline } from "@/lib/timeline/timelineEngine"
 
@@ -42,13 +43,14 @@ function MacroBar({
   target: number
   color: string
 }) {
-  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0
+  const roundedCurrent = Math.round(current)
+  const pct = target > 0 ? Math.min(100, Math.round((roundedCurrent / target) * 100)) : 0
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-[var(--muted)]">{label}</span>
         <span className="text-[var(--foreground)] tabular-nums">
-          {current} / {target}
+          {roundedCurrent} / {target}
         </span>
       </div>
       <div className="h-2 rounded-full bg-[var(--surface-border)] overflow-hidden">
@@ -88,6 +90,41 @@ function groupMediaByDate<T extends { message_timestamp: string }>(items: T[]) {
     groups.set(key, [...(groups.get(key) ?? []), item])
   }
   return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a))
+}
+
+function dateKeyFromDate(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function parseDateKey(value: string | undefined): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return dateKeyFromDate(new Date())
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isNaN(date.getTime()) ? dateKeyFromDate(new Date()) : value
+}
+
+function dateFromKey(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`)
+}
+
+function addDays(value: string, days: number): string {
+  const date = dateFromKey(value)
+  date.setUTCDate(date.getUTCDate() + days)
+  return dateKeyFromDate(date)
+}
+
+function formatTime12Hour(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null
+  const [hourText, minuteText] = value.split(":")
+  const hour = Number(hourText)
+  const minute = Number(minuteText ?? 0)
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value
+  const date = new Date(Date.UTC(2000, 0, 1, hour, minute))
+  return date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })
+}
+
+function routinePart(label: string, value: unknown): string | null {
+  const formatted = formatTime12Hour(value)
+  return formatted ? `${label} ${formatted}` : null
 }
 
 function sumMeals(meals: MealRecord[]) {
@@ -183,6 +220,15 @@ function messageTypeLabel(message: ClientWhatsAppMessage) {
   return message.message_type
 }
 
+function isRelevantConversationMessage(message: ClientWhatsAppMessage): boolean {
+  if (message.direction === "INBOUND") return true
+  if (message.food_log) return true
+  const text = message.display_text.toLowerCase()
+  return ["food", "meal", "diet", "nutrition", "calorie", "protein", "carb", "fat", "logged:"].some((keyword) =>
+    text.includes(keyword),
+  )
+}
+
 function mediaReadinessText(message: ClientWhatsAppMessage): string | null {
   const type = message.message_type.toUpperCase()
   const isMediaType = ["IMAGE", "AUDIO", "VOICE", "VIDEO", "DOCUMENT", "MEDIA"].includes(type)
@@ -200,15 +246,17 @@ function mediaReadinessText(message: ClientWhatsAppMessage): string | null {
 }
 
 function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMessage[]; error: string | null }) {
+  const visibleMessages = messages.filter(isRelevantConversationMessage)
+
   return (
     <DashboardSection title="WhatsApp Conversation" description="Saved message history and delivery status for this client">
       <Card>
         <CardContent className="space-y-4">
           {error ? (
             <ErrorState title={error} />
-          ) : messages.length > 0 ? (
-            <div className="space-y-3">
-              {messages.map((message) => (
+          ) : visibleMessages.length > 0 ? (
+            <div className="max-h-[360px] space-y-3 overflow-y-auto pr-2">
+              {visibleMessages.map((message) => (
                 <div
                   key={message.id}
                   className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-overlay)] p-4"
@@ -269,20 +317,13 @@ function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMes
                       </div>
                     </details>
                   ) : null}
-
-                  {message.wam_id ? (
-                    <details className="mt-2 text-xs text-[var(--muted)]">
-                      <summary className="cursor-pointer hover:text-[var(--foreground)]">Provider id</summary>
-                      <p className="mt-1 break-all font-mono text-[10px]">{message.wam_id}</p>
-                    </details>
-                  ) : null}
                 </div>
               ))}
             </div>
           ) : (
             <EmptyState
-              title="No WhatsApp messages yet"
-              description="Outbound templates, client replies, delivery status, and food-log context will appear here after messages are saved."
+              title="No nutrition conversation yet"
+              description="Client replies and nutrition-related messages will appear here after they are saved."
             />
           )}
         </CardContent>
@@ -293,10 +334,17 @@ function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMes
 
 export default async function ClientDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ date?: string }>
 }) {
   const { id } = await params
+  const selectedDateKey = parseDateKey((await searchParams)?.date)
+  const selectedDate = dateFromKey(selectedDateKey)
+  const previousDateKey = addDays(selectedDateKey, -1)
+  const nextDateKey = addDays(selectedDateKey, 1)
+  const todayDateKey = dateKeyFromDate(new Date())
 
   const supabase = await createClient()
   const {
@@ -377,7 +425,7 @@ export default async function ClientDetailPage({
   const eventEntries = mapEngagementEvents(events, id)
   const stateEntries = mapClientState(client)
   const meals = await getClientMeals(id, { limit: 40, trainerId: authUserId })
-  const todayMeals = await getClientMealsForDay(id, new Date(), authUserId)
+  const selectedDayMeals = await getClientMealsForDay(id, selectedDate, authUserId)
   let whatsappMessages: ClientWhatsAppMessage[] = []
   let whatsappConversationError: string | null = null
   try {
@@ -387,7 +435,7 @@ export default async function ClientDetailPage({
   }
   const latestMeals = meals.slice(0, 6)
   const mealEntries = mapMealRecordsToTimelineEntries(latestMeals)
-  const todayMacros = sumMeals(todayMeals)
+  const selectedDayMacros = sumMeals(selectedDayMeals)
 
   const unverifiedMeals = meals.filter(
     (m) => m.review.status === "unverified",
@@ -400,8 +448,9 @@ export default async function ClientDetailPage({
   const workout = clientDetail?.workout ?? null
   const latestPhotoMedia = (clientDetail?.media ?? [])
     .filter(isDisplayablePhoto)
-    .slice(0, 8)
-  const mediaByDate = groupMediaByDate(latestPhotoMedia)
+    .slice(0, 60)
+  const selectedPhotoMedia = latestPhotoMedia.filter((item) => item.message_timestamp.slice(0, 10) === selectedDateKey)
+  const mediaByDate = groupMediaByDate(selectedPhotoMedia)
   const bmi = computeBmi(health)
   const latestActivityEntries = buildTimeline([eventEntries, stateEntries, mealEntries]).slice(0, 2)
 
@@ -425,6 +474,7 @@ export default async function ClientDetailPage({
             <h1 className="text-lg font-semibold text-[var(--foreground)]">
               {client.client_name}
             </h1>
+            <ClientNameEditor clientId={client.client_id} initialName={client.client_name} />
             <Badge
               variant={
                 riskLevel === "high"
@@ -455,7 +505,7 @@ export default async function ClientDetailPage({
             </Badge>
           </div>
           <p className="text-sm text-[var(--muted)] mt-1">
-            {todayMeals.length} intake event{todayMeals.length !== 1 ? "s" : ""} today · {formatNumber(todayMacros.calories)} kcal logged
+            {selectedDayMeals.length} intake event{selectedDayMeals.length !== 1 ? "s" : ""} on {formatDate(selectedDate)} · {formatNumber(Math.round(selectedDayMacros.calories))} kcal logged
           </p>
         </div>
       </div>
@@ -604,10 +654,10 @@ export default async function ClientDetailPage({
                     <p className="text-xs text-[var(--muted)]">Meal routine</p>
                     <p className="font-medium text-[var(--foreground)]">
                       {[
-                        onboarding?.skipped_meals?.includes("breakfast") ? "Breakfast skipped" : workout?.breakfast_time ? `Breakfast ${workout.breakfast_time}` : null,
-                        workout?.lunch_time ? `Lunch ${workout.lunch_time}` : null,
-                        workout?.snack_time ? `Snack ${workout.snack_time}` : null,
-                        workout?.dinner_time ? `Dinner ${workout.dinner_time}` : null,
+                        onboarding?.skipped_meals?.includes("breakfast") ? "Breakfast skipped" : routinePart("Breakfast", workout?.breakfast_time),
+                        routinePart("Lunch", workout?.lunch_time),
+                        routinePart("Snack", workout?.snack_time),
+                        routinePart("Dinner", workout?.dinner_time),
                       ].filter(Boolean).join(", ") || "Not set"}
                     </p>
                   </div>
@@ -632,31 +682,64 @@ export default async function ClientDetailPage({
           </div>
         </DashboardSection>
 
+        <Card>
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[var(--foreground)]">Daily review</p>
+              <p className="text-xs text-[var(--muted)]">
+                Showing macros, photos, and timeline for {formatDate(selectedDate)}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/dashboard/clients/${id}?date=${previousDateKey}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--surface-border)] px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
+              >
+                <ChevronLeft size={14} />
+                Previous day
+              </Link>
+              <Link
+                href={`/dashboard/clients/${id}?date=${todayDateKey}`}
+                className="inline-flex items-center rounded-lg border border-[var(--surface-border)] px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
+              >
+                Today
+              </Link>
+              <Link
+                href={`/dashboard/clients/${id}?date=${nextDateKey}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--surface-border)] px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
+              >
+                Next day
+                <ChevronRight size={14} />
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
-          <DashboardSection title="Today's Macros" description={`${todayMeals.length} logged intake event${todayMeals.length !== 1 ? "s" : ""} for ${formatDate(new Date())}`}>
+          <DashboardSection title="Daily Macros" description={`${selectedDayMeals.length} logged intake event${selectedDayMeals.length !== 1 ? "s" : ""} for ${formatDate(selectedDate)}`}>
             <Card>
               <CardContent className="space-y-4">
                 <MacroBar
                   label="Calories (kcal)"
-                  current={todayMacros.calories}
+                  current={selectedDayMacros.calories}
                   target={TARGETS.calories}
                   color="#22c55e"
                 />
                 <MacroBar
                   label="Protein (g)"
-                  current={Math.round(todayMacros.protein * 10) / 10}
+                  current={selectedDayMacros.protein}
                   target={TARGETS.protein}
                   color="#38bdf8"
                 />
                 <MacroBar
                   label="Carbohydrates (g)"
-                  current={Math.round(todayMacros.carbs * 10) / 10}
+                  current={selectedDayMacros.carbs}
                   target={TARGETS.carbs}
                   color="#f59e0b"
                 />
                 <MacroBar
                   label="Fat (g)"
-                  current={Math.round(todayMacros.fat * 10) / 10}
+                  current={selectedDayMacros.fat}
                   target={TARGETS.fat}
                   color="#f472b6"
                 />
@@ -664,7 +747,7 @@ export default async function ClientDetailPage({
             </Card>
           </DashboardSection>
 
-          <DashboardSection title="Client Photos" description="Inbound WhatsApp photos grouped by date">
+          <DashboardSection title="Client Photos" description={`Inbound WhatsApp photos for ${formatDate(selectedDate)}`}>
             {mediaByDate.length > 0 ? (
               <div className="space-y-5">
                 {mediaByDate.map(([dateKey, items]) => (
@@ -705,63 +788,46 @@ export default async function ClientDetailPage({
             ) : (
               <Card>
                 <CardContent className="py-6">
-                  <EmptyState title="No photos" description="Photos will appear here only after this client sends an image on WhatsApp." />
+                  <EmptyState title="No photos for this day" description="Use the date controls to review photos from previous days." />
                 </CardContent>
               </Card>
             )}
           </DashboardSection>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DashboardSection title="Workout Routine" description="Timing used by WhatsApp reminder logic">
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--warning)]/10">
-                    <Dumbbell size={16} className="text-[var(--warning)]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--foreground)]">{valueText(workout, "workout_time", "No workout time")}</p>
-                    <p className="text-xs text-[var(--muted)]">Timezone: {valueText(workout, "timezone", "Asia/Kolkata")}</p>
-                  </div>
+        <DashboardSection title="Workout Routine">
+          <Card>
+            <CardContent className="flex flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--warning)]/10">
+                  <Dumbbell size={16} className="text-[var(--warning)]" />
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Check-in</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {valueText(workout, "checkin_preference", valueText(workout, "preferred_checkin_time"))}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Rest days</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {Array.isArray(workout?.rest_days) && workout.rest_days.length > 0 ? workout.rest_days.join(", ") : "Not set"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Routine</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {[
-                        Array.isArray(clientDetail?.onboarding?.skipped_meals) && clientDetail.onboarding.skipped_meals.includes("breakfast")
-                          ? "B skipped"
-                          : workout?.breakfast_time ? `B ${workout.breakfast_time}` : null,
-                        workout?.lunch_time ? `L ${workout.lunch_time}` : null,
-                        workout?.snack_time ? `S ${workout.snack_time}` : null,
-                        workout?.dinner_time ? `D ${workout.dinner_time}` : null,
-                      ].filter(Boolean).join(", ") || "Not set"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Workout days</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {Array.isArray(workout?.workout_days) && workout.workout_days.length > 0 ? workout.workout_days.join(", ") : "Not set"}
-                    </p>
-                  </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">
+                    {formatTime12Hour(workout?.workout_time) ?? "No workout time"}
+                  </p>
+                  <p className="text-xs text-[var(--muted)]">Routine used for reminders and check-ins</p>
                 </div>
-              </CardContent>
-            </Card>
-          </DashboardSection>
-        </div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant="outline">
+                  Check-in {formatTime12Hour(workout?.preferred_checkin_time) ?? valueText(workout, "checkin_preference")}
+                </Badge>
+                <Badge variant="outline">
+                  {[routinePart("B", workout?.breakfast_time), routinePart("L", workout?.lunch_time), routinePart("S", workout?.snack_time), routinePart("D", workout?.dinner_time)]
+                    .filter(Boolean)
+                    .join(" · ") || "Meal routine not set"}
+                </Badge>
+                <Badge variant="outline">
+                  Rest {Array.isArray(workout?.rest_days) && workout.rest_days.length > 0 ? workout.rest_days.join(", ") : "not set"}
+                </Badge>
+                <Badge variant="outline">
+                  Workout days {Array.isArray(workout?.workout_days) && workout.workout_days.length > 0 ? workout.workout_days.join(", ") : "not set"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </DashboardSection>
 
         <DashboardSection title="Latest Logged Intake" description="Review intake by week, then by day. Dates are shown above the table.">
           <MealHistory
@@ -774,8 +840,8 @@ export default async function ClientDetailPage({
 
         <WhatsAppConversation messages={whatsappMessages} error={whatsappConversationError} />
 
-        <DashboardSection title="Latest Activity">
-          <ClientTimeline sources={[eventEntries, stateEntries, mealEntries]} />
+        <DashboardSection title="Client Timeline" description={`Activity for ${formatDate(selectedDate)}`}>
+          <ClientTimeline sources={[eventEntries, stateEntries, mealEntries]} selectedDateKey={selectedDateKey} />
         </DashboardSection>
         </div>
     </PageContainer>

@@ -219,6 +219,12 @@ export async function updateMealReviewWorkflow(
       updates.reviewed_at = now
       updates.reviewed_by = trainerId
     }
+    if (patch.reviewState === "reviewed" || patch.reviewState === "corrected" || patch.reviewState === "merged") {
+      updates.verification_status = "VERIFIED"
+    }
+    if (patch.reviewState === "rejected") {
+      updates.verification_status = "UNVERIFIED"
+    }
   }
   if (patch.aiConfidence !== undefined) updates.ai_confidence = patch.aiConfidence
   if (patch.reviewReason !== undefined) updates.review_reason = patch.reviewReason

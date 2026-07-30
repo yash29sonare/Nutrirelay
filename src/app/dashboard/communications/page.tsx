@@ -137,19 +137,23 @@ export default async function CommunicationsPage({
           <CardContent className="space-y-4 py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <nav aria-label="Inbox filters" className="flex flex-wrap gap-2">
-                {FILTERS.map((option) => (
-                  <Link
-                    key={option.value}
-                    href={filterHref(option.value, q?.trim() ?? "")}
-                    className={
-                      option.value === filter
-                        ? "rounded-full bg-[var(--foreground)] px-3 py-1.5 text-xs font-medium text-[var(--background)]"
-                        : "rounded-full border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--surface-overlay)] hover:text-[var(--foreground)]"
-                    }
-                  >
-                    {option.label}
-                  </Link>
-                ))}
+                {FILTERS.map((option) => {
+                  const selected = option.value === filter
+                  return (
+                    <a
+                      key={option.value}
+                      href={filterHref(option.value, q?.trim() ?? "")}
+                      aria-current={selected ? "page" : undefined}
+                      className={
+                        selected
+                          ? "rounded-full bg-[var(--foreground)] px-3 py-1.5 text-xs font-medium text-[var(--background)]"
+                          : "rounded-full border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--surface-overlay)] hover:text-[var(--foreground)]"
+                      }
+                    >
+                      {option.label}
+                    </a>
+                  )
+                })}
               </nav>
 
               <form action="/dashboard/communications" method="GET" className="flex w-full gap-2 lg:max-w-sm">

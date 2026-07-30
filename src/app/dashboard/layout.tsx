@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   let role: "admin" | "client" | "trainer" = "trainer";
   let displayName = "Trainer";
-  let email = user?.email ?? "";
+  const email = user?.email ?? "";
 
   if (user?.id) {
     const { data: profile } = await supabase
@@ -41,6 +41,13 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   return (
     <ShellProvider>
       <div className="flex h-screen overflow-hidden bg-[var(--background)]">
+        <input
+          id="dashboard-mobile-nav-open"
+          type="checkbox"
+          className="dashboard-mobile-nav-toggle sr-only"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
         <Sidebar isAdmin={isAdmin} displayName={displayName} />
         <MobileNav isAdmin={isAdmin} displayName={displayName} />
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">

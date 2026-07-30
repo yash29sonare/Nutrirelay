@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import type { MealRecord } from "@/types/meal"
 import { Badge } from "@/components/ui/Badge"
-import { Card, CardContent, CardHeader } from "@/components/ui/Card"
+import { Card, CardHeader } from "@/components/ui/Card"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
 import { formatMealType, formatReviewStatus } from "@/lib/meals/mealFormatting"
@@ -76,6 +76,10 @@ function foodLabel(record: MealRecord): string {
   const text = record.sourceText?.trim()
   if (text && text !== "unknown") return text
   return formatMealType(record.mealType)
+}
+
+function wholeNumber(value: number): string {
+  return formatNumber(Math.round(value))
 }
 
 export function MealHistory({ meals, title = "Meal history", description, enableReviewActions = false }: MealHistoryProps) {
@@ -234,16 +238,16 @@ export function MealHistory({ meals, title = "Meal history", description, enable
                   {formatDateTime(meal.mealTimestamp)}
                 </td>
                 <td className="px-5 py-3 whitespace-nowrap tabular-nums text-right text-[var(--foreground)]">
-                  {formatNumber(meal.calories)}
+                  {wholeNumber(meal.calories)}
                 </td>
                 <td className="px-5 py-3 whitespace-nowrap tabular-nums text-right text-[var(--foreground)]">
-                  {formatNumber(meal.proteinG)}
+                  {wholeNumber(meal.proteinG)}
                 </td>
                 <td className="px-5 py-3 whitespace-nowrap tabular-nums text-right text-[var(--foreground)]">
-                  {formatNumber(meal.carbsG)}
+                  {wholeNumber(meal.carbsG)}
                 </td>
                 <td className="px-5 py-3 whitespace-nowrap tabular-nums text-right text-[var(--foreground)]">
-                  {formatNumber(meal.fatG)}
+                  {wholeNumber(meal.fatG)}
                 </td>
                 <td className="px-5 py-3 whitespace-nowrap text-center">
                   <StatusBadge record={meal} />

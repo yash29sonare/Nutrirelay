@@ -20,13 +20,18 @@ function filterEntries(
 
 interface ClientTimelineProps {
   sources: TimelineEntry[][]
+  selectedDateKey?: string
 }
 
-export function ClientTimeline({ sources }: ClientTimelineProps) {
+export function ClientTimeline({ sources, selectedDateKey }: ClientTimelineProps) {
   const [filter, setFilter] = useState<TimelineFilterValue>("all")
 
   const timeline = useMemo(() => buildTimeline(sources), [sources])
-  const filtered = useMemo(() => filterEntries(timeline, filter), [timeline, filter])
+  const filtered = useMemo(() => {
+    const byFilter = filterEntries(timeline, filter)
+    if (!selectedDateKey) return byFilter
+    return byFilter.filter((entry) => entry.timestamp.slice(0, 10) === selectedDateKey)
+  }, [timeline, filter, selectedDateKey])
   const groups = useMemo(() => groupTimeline(filtered), [filtered])
 
   return (

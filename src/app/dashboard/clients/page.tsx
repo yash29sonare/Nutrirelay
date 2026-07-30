@@ -1,6 +1,4 @@
-import { Suspense } from "react"
 import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Avatar } from "@/components/ui/Avatar"
 import { PageContainer } from "@/components/layout/PageContainer"
@@ -69,7 +67,7 @@ export default async function ClientsPage({
       : []
 
   return (
-    <PageContainer>
+    <PageContainer className="flex min-h-[calc(100vh-8rem)] flex-col">
       <PageHeader
         title="Clients"
         description={
@@ -85,51 +83,56 @@ export default async function ClientsPage({
         </div>
       )}
 
-      {!authUserId && (
-        <EmptyState
-          icon={<Users size={18} aria-hidden="true" />}
-          title="Sign in to view your client roster."
-        />
-      )}
+      <section
+        className="flex min-h-[28rem] flex-1 flex-col rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-4"
+        aria-label="Client roster"
+      >
+        {!authUserId && (
+          <div className="flex flex-1 items-center justify-center">
+            <EmptyState
+              icon={<Users size={18} aria-hidden="true" />}
+              title="Sign in to view your client roster."
+            />
+          </div>
+        )}
 
-      {authUserId && clients.length === 0 && (
-        <EmptyState
-          icon={<Users size={18} aria-hidden="true" />}
-          title="No clients match your current filters."
-        />
-      )}
+        {authUserId && clients.length === 0 && (
+          <div className="flex flex-1 items-center justify-center">
+            <EmptyState
+              icon={<Users size={18} aria-hidden="true" />}
+              title="No clients match your current filters."
+            />
+          </div>
+        )}
 
-      {authUserId && clients.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {clients.map((client) => (
-            <Link
-              key={client.client_id}
-              href={`/dashboard/clients/${client.client_id}`}
-              className="block"
-            >
-              <Card className="hover:bg-[var(--surface-overlay)] transition-colors duration-150 cursor-pointer">
-                <CardContent className="py-3 px-5 flex items-center gap-3">
-                  <Avatar
-                    fallback={getInitials(client.client_name)}
-                    size="md"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                      {client.client_name}
-                    </p>
-                    <p className="text-xs text-[var(--muted)] mt-0.5">
-                      {client.total_meals_logged_today} meal
-                      {client.total_meals_logged_today !== 1 ? "s" : ""} today
-                      &nbsp;·&nbsp;{client.total_calories_today} kcal
-                    </p>
-                  </div>
-                  {getStatusBadge(client)}
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
+        {authUserId && clients.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {clients.map((client) => (
+              <Link
+                key={client.client_id}
+                href={`/dashboard/clients/${client.client_id}`}
+                className="flex items-center gap-3 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-card)] px-5 py-3 transition-colors duration-150 hover:bg-[var(--surface-overlay)]"
+              >
+                <Avatar
+                  fallback={getInitials(client.client_name)}
+                  size="md"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[var(--foreground)] truncate">
+                    {client.client_name}
+                  </p>
+                  <p className="text-xs text-[var(--muted)] mt-0.5">
+                    {client.total_meals_logged_today} meal
+                    {client.total_meals_logged_today !== 1 ? "s" : ""} today
+                    &nbsp;·&nbsp;{client.total_calories_today} kcal
+                  </p>
+                </div>
+                {getStatusBadge(client)}
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </PageContainer>
   )
 }
