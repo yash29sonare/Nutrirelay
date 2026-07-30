@@ -84,12 +84,13 @@ export async function POST(req: NextRequest) {
     const trainer =
       await resolveTrainerForDevOverride(body.trainer_id)
       ?? await requireTrainerContext();
+    const trainerProfileId = trainer.authUserId;
     const db = getWhatsAppServiceDb();
 
     const { data: trainerClient } = await db
       .from("trainer_clients")
       .select("client_id")
-      .eq("trainer_id", trainer.authUserId)
+      .eq("trainer_id", trainerProfileId)
       .eq("client_id", clientId)
       .eq("is_active", true)
       .limit(1)
@@ -118,17 +119,17 @@ export async function POST(req: NextRequest) {
     }
 
     const result = sendMode === "template"
-      ? await sendTemplateMessage(trainer.authUserId, clientPhone, "hello_world", [])
+      ? await sendTemplateMessage(trainerProfileId, clientPhone, "hello_world", [])
       : sendMode === "interactive_list"
         ? await sendInteractiveListMessage({
-          trainerId: trainer.authUserId,
+          trainerId: trainerProfileId,
           clientPhone,
           prompt: INTERACTIVE_LIST_PAYLOAD.prompt,
           buttonText: INTERACTIVE_LIST_PAYLOAD.buttonText,
           sectionTitle: INTERACTIVE_LIST_PAYLOAD.sectionTitle,
           options: [...INTERACTIVE_LIST_PAYLOAD.options],
         })
-        : await sendFreeMessage(trainer.authUserId, clientPhone, messageText!);
+        : await sendFreeMessage(trainerProfileId, clientPhone, messageText!);
 
     return NextResponse.json({
       ok: true,

@@ -84,7 +84,7 @@ export async function persistWhatsAppStatuses(payload: unknown): Promise<{
       continue;
     }
 
-    let query = db
+    const query = db
       .from("communication_logs")
       .update({ delivery_status: row.status as string })
       .eq("wam_id", row.wam_id as string)

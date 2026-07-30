@@ -224,7 +224,7 @@ export default async function SettingsPage() {
                 <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4 text-sm leading-6 text-[var(--muted)]">
                   <p className="font-medium text-[var(--foreground)]">Manual payment instructions</p>
                   <p className="mt-2">No Razorpay, Stripe, card collection, or automatic payment success is active in NutriRelay.</p>
-                  <p>Do not enter a UPI PIN in NutriRelay. Complete payment only inside the trainer's UPI app, then wait for operator verification.</p>
+                  <p>Do not enter a UPI PIN in NutriRelay. Complete payment only inside the trainer&apos;s UPI app, then wait for operator verification.</p>
                 </div>
               </div>
             </div>
@@ -261,7 +261,7 @@ export default async function SettingsPage() {
               </div>
               {!isCredentialConnected ? (
                 <div className="rounded-lg border border-[var(--warning)]/20 bg-[var(--warning)]/10 px-3 py-2 text-xs text-[var(--warning)]">
-                  Add or update the trainer's WABA credential manually before running a pilot.
+                  Add or update the trainer&apos;s WABA credential manually before running a pilot.
                 </div>
               ) : null}
             </div>

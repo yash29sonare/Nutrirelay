@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 type Theme = "light" | "dark" | "system";
 
@@ -29,23 +29,30 @@ function getStoredTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(getStoredTheme);
-  const [resolved, setResolved] = useState<"light" | "dark">(() => {
-    const t = getStoredTheme();
-    return t === "system" ? getSystemTheme() : t;
-  });
+  const [theme, setTheme] = useState<Theme>("system");
+  const [systemTheme, setSystemTheme] = useState<"light" | "dark">("light");
+  const hasLoadedPreference = useRef(false);
+  const resolved = theme === "system" ? systemTheme : theme;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      hasLoadedPreference.current = true;
+      setTheme(getStoredTheme());
+      setSystemTheme(getSystemTheme());
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     applyTheme(resolved);
-  }, []);
+  }, [resolved]);
 
   useEffect(() => {
     if (theme === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       const handler = (e: MediaQueryListEvent) => {
-        const r = e.matches ? "dark" : "light";
-        setResolved(r);
-        applyTheme(r);
+        setSystemTheme(e.matches ? "dark" : "light");
       };
       mq.addEventListener("change", handler);
       return () => mq.removeEventListener("change", handler);
@@ -53,18 +60,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
-    if (theme === "system") {
-      const r = getSystemTheme();
-      setResolved(r);
-      applyTheme(r);
-    } else {
-      setResolved(theme);
-      applyTheme(theme);
+    if (hasLoadedPreference.current) {
+      localStorage.setItem("ff-theme", theme);
     }
-    localStorage.setItem("ff-theme", theme);
   }, [theme]);
 
-  const setThemeFn = useCallback((t: Theme) => setTheme(t), []);
+  const setThemeFn = useCallback((t: Theme) => {
+    hasLoadedPreference.current = true;
+    setTheme(t);
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ theme, resolved, setTheme: setThemeFn }}>
