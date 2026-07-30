@@ -1,18 +1,66 @@
 import Link from "next/link"
 import {
   AlertTriangle,
+  Camera,
+  CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
+  Clock3,
   FileCheck2,
+  MessageCircle,
+  Mic,
   Salad,
+  Settings,
   Users,
 } from "lucide-react"
 import { Badge } from "@/components/ui/Badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
+import { Card, CardContent } from "@/components/ui/Card"
 import { DashboardSection } from "@/components/layout/DashboardSection"
 import { formatRelativeDate } from "@/lib/format"
 import type { ClientSummaryCard } from "@/lib/dashboard-reads"
 import type { DashboardDataDTO } from "@/types/dashboard"
+
+interface OverviewReportSummary {
+  client_id: string
+  ready_count: number
+  label: string | null
+}
+
+interface WhatsAppConnectionOverview {
+  connected: boolean
+  status: string
+}
+
+interface WorkspaceDashboardProps {
+  data: DashboardDataDTO
+  clientSummaries: ClientSummaryCard[]
+  reportSummaries: OverviewReportSummary[]
+  reportsReady: number
+  whatsappConnection: WhatsAppConnectionOverview | null
+  userName: string | null
+}
+
+interface ClientOverview {
+  client_id: string
+  client_name: string
+  goal_type: string | null
+  meals_today: number
+  last_activity_at: string | null
+  last_activity_label: string | null
+  check_in_status: string
+  pending_food_reviews: number
+  pending_photo_reviews: number
+  pending_voice_reviews: number
+  pending_reply_reviews: number
+  pending_updates: number
+  report_ready_count: number
+  report_label: string | null
+}
+
+interface AttentionBadge {
+  label: string
+  icon: typeof MessageCircle
+  variant: "brand" | "warning" | "info" | "outline"
+}
 
 function getGreeting(): string {
   const hour = new Date().getHours()
@@ -35,44 +83,151 @@ function formatGoal(goal: string | null | undefined) {
   return goal.replaceAll("_", " ").toLowerCase()
 }
 
-interface WorkspaceDashboardProps {
+function plural(value: number, singular: string, pluralLabel = `${singular}s`) {
+  return `${value} ${value === 1 ? singular : pluralLabel}`
+}
+
+function makeClients(input: {
   data: DashboardDataDTO
   clientSummaries: ClientSummaryCard[]
-  reportsReady: number | null
-  userName: string | null
+  reportSummaries: OverviewReportSummary[]
+}): ClientOverview[] {
+  const summaryByClient = new Map(input.clientSummaries.map((client) => [client.client_id, client]))
+  const reportsByClient = new Map(input.reportSummaries.map((report) => [report.client_id, report]))
+
+  return input.data.clients.map((client) => {
+    const summary = summaryByClient.get(client.client_id)
+    const report = reportsByClient.get(client.client_id)
+    const mealsToday = summary?.meals_today ?? client.total_meals_logged_today
+
+    return {
+      client_id: client.client_id,
+      client_name: summary?.client_name ?? client.client_name ?? "Client",
+      goal_type: summary?.goal_type ?? null,
+      meals_today: mealsToday,
+      last_activity_at: summary?.last_activity_at ?? summary?.last_logged ?? null,
+      last_activity_label: summary?.last_activity_label ?? null,
+      check_in_status: summary?.check_in_status ?? (mealsToday > 0 ? "Checked in today" : "No meal today"),
+      pending_food_reviews: summary?.pending_food_reviews ?? 0,
+      pending_photo_reviews: summary?.pending_photo_reviews ?? 0,
+      pending_voice_reviews: summary?.pending_voice_reviews ?? 0,
+      pending_reply_reviews: summary?.pending_reply_reviews ?? 0,
+      pending_updates: summary?.pending_updates ?? 0,
+      report_ready_count: report?.ready_count ?? 0,
+      report_label: report?.label ?? null,
+    }
+  })
+}
+
+function buildAttentionBadges(client: ClientOverview): AttentionBadge[] {
+  const badges: AttentionBadge[] = []
+
+  if (client.pending_reply_reviews > 0) {
+    badges.push({
+      label: client.pending_reply_reviews === 1 ? "Pending update" : plural(client.pending_reply_reviews, "update"),
+      icon: MessageCircle,
+      variant: "brand",
+    })
+  }
+  if (client.pending_food_reviews > 0) {
+    badges.push({
+      label: client.pending_food_reviews === 1 ? "Food review" : plural(client.pending_food_reviews, "food reviews", "food reviews"),
+      icon: Salad,
+      variant: "warning",
+    })
+  }
+  if (client.pending_photo_reviews > 0) {
+    badges.push({
+      label: client.pending_photo_reviews === 1 ? "Photo review" : plural(client.pending_photo_reviews, "photo reviews", "photo reviews"),
+      icon: Camera,
+      variant: "warning",
+    })
+  }
+  if (client.pending_voice_reviews > 0) {
+    badges.push({
+      label: client.pending_voice_reviews === 1 ? "Voice review" : plural(client.pending_voice_reviews, "voice reviews", "voice reviews"),
+      icon: Mic,
+      variant: "warning",
+    })
+  }
+  if (client.meals_today === 0) {
+    badges.push({
+      label: "No meal today",
+      icon: Clock3,
+      variant: "outline",
+    })
+  }
+  if (client.report_ready_count > 0) {
+    badges.push({
+      label: client.report_ready_count === 1 ? "Report ready" : plural(client.report_ready_count, "reports ready", "reports ready"),
+      icon: FileCheck2,
+      variant: "info",
+    })
+  }
+
+  return badges
+}
+
+function primaryReason(client: ClientOverview): string {
+  return buildAttentionBadges(client)[0]?.label ?? "Review client"
+}
+
+function formatLastActivity(client: ClientOverview): string {
+  if (!client.last_activity_at) return "No recent activity"
+  const relative = formatRelativeDate(client.last_activity_at)
+  return client.last_activity_label ? `${client.last_activity_label} ${relative}` : relative
 }
 
 export function WorkspaceDashboard({
   data,
   clientSummaries,
+  reportSummaries,
   reportsReady,
+  whatsappConnection,
   userName,
 }: WorkspaceDashboardProps) {
   const displayName = userName ?? data.trainer.business_name ?? "Trainer"
-  const summaryByClient = new Map(clientSummaries.map((client) => [client.client_id, client]))
-  const attentionClients = data.clients.filter(
-    (client) => client.active_strike_count > 0 || client.total_meals_logged_today === 0,
-  )
-  const mealsToday = data.clients.reduce((total, client) => total + client.total_meals_logged_today, 0)
-  const noLogCount = data.clients.filter((client) => client.total_meals_logged_today === 0).length
+  const clients = makeClients({ data, clientSummaries, reportSummaries })
+  const clientsWithBadges = clients.map((client) => ({
+    client,
+    badges: buildAttentionBadges(client),
+  }))
+  const attentionClients = clientsWithBadges.filter(({ badges }) => badges.length > 0)
+  const pendingUpdateClients = clients.filter((client) => client.pending_updates > 0)
+  const mealsToday = clients.reduce((total, client) => total + client.meals_today, 0)
+  const whatsappConnected = whatsappConnection?.connected === true
 
   const todayCards = [
-    { label: "Active clients", value: data.metrics.activeClients, icon: Users, tone: "text-sky-600 bg-sky-500/10" },
+    { label: "Active clients", value: clients.length, icon: Users, tone: "text-sky-600 bg-sky-500/10" },
     { label: "Need attention", value: attentionClients.length, icon: AlertTriangle, tone: "text-amber-600 bg-amber-500/10" },
-    { label: "Meals logged today", value: mealsToday, icon: Salad, tone: "text-emerald-600 bg-emerald-500/10" },
-    ...(reportsReady === null
-      ? []
-      : [{ label: "Weekly reports ready", value: reportsReady, icon: FileCheck2, tone: "text-violet-600 bg-violet-500/10" }]),
+    { label: "Pending updates", value: pendingUpdateClients.length, icon: MessageCircle, tone: "text-brand-600 bg-brand-500/10" },
+    { label: "Meals today", value: mealsToday, icon: Salad, tone: "text-emerald-600 bg-emerald-500/10" },
   ]
 
   return (
     <div className="space-y-7">
-      <header>
-        <p className="text-sm text-[var(--muted)]">{formatCurrentDate()}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
-          {getGreeting()}, {displayName}
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Here is what needs your attention today.</p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm text-[var(--muted)]">{formatCurrentDate()}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
+            {getGreeting()}, {displayName}
+          </h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">Which clients need me today?</p>
+        </div>
+        {whatsappConnected ? (
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--success)]/20 bg-[var(--success)]/10 px-3 py-1.5 text-xs font-medium text-[var(--success)]">
+            <CheckCircle2 size={14} />
+            WhatsApp connected
+          </span>
+        ) : (
+          <Link
+            href="/dashboard/settings"
+            className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--warning)]/25 bg-[var(--warning)]/10 px-3 py-1.5 text-xs font-medium text-[var(--warning)] transition-colors hover:bg-[var(--warning)]/15"
+          >
+            <Settings size={14} />
+            WhatsApp setup needed
+          </Link>
+        )}
       </header>
 
       <section aria-labelledby="today-summary">
@@ -94,119 +249,146 @@ export function WorkspaceDashboard({
         </div>
       </section>
 
-      <DashboardSection title="Coaching insights">
-        <div className="grid gap-3 md:grid-cols-3">
-          <Card>
-            <CardContent className="py-4">
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                {noLogCount === 0
-                  ? "Every active client has logged a meal today."
-                  : `${noLogCount} client${noLogCount === 1 ? " has" : "s have"} not logged meals today.`}
-              </p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Based on today’s trainer-owned food logs.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                {data.metrics.atRiskClients === 0
-                  ? "No clients have active risk strikes."
-                  : `${data.metrics.atRiskClients} client${data.metrics.atRiskClients === 1 ? " has" : "s have"} active risk indicators.`}
-              </p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Open the attention feed for the affected client.</p>
-            </CardContent>
-          </Card>
-          {reportsReady !== null ? (
-            <Card>
-              <CardContent className="py-4">
-                <p className="text-sm font-medium text-[var(--foreground)]">
-                  {reportsReady === 0
-                    ? "No weekly client reports have data yet."
-                    : `${reportsReady} weekly report${reportsReady === 1 ? " is" : "s are"} ready to preview.`}
-                </p>
-                <Link href="/dashboard/reports" className="mt-1 inline-flex text-xs font-medium text-brand-500 hover:text-brand-600">
-                  Open reports
+      <DashboardSection
+        title="Clients today"
+        description="Open a client to review replies, food logs, photos, voice notes, and reports."
+      >
+        {clientsWithBadges.length > 0 ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {clientsWithBadges.map(({ client, badges }) => {
+              const visibleBadges = badges.slice(0, 3)
+              const hiddenBadgeCount = Math.max(0, badges.length - visibleBadges.length)
+              const clientHref = `/dashboard/clients/${client.client_id}`
+
+              return (
+                <Link
+                  key={client.client_id}
+                  href={clientHref}
+                  className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                  aria-label={`Open ${client.client_name}`}
+                >
+                  <Card className="h-full transition-colors hover:border-brand-500/40 hover:bg-[var(--surface-overlay)]">
+                    <CardContent className="flex h-full flex-col gap-4 py-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-semibold text-[var(--foreground)]">{client.client_name}</h3>
+                          <p className="mt-1 text-xs capitalize text-[var(--muted)]">{formatGoal(client.goal_type)}</p>
+                        </div>
+                        <Badge variant={badges.length > 0 ? "warning" : "success"}>
+                          {badges.length > 0 ? "Needs review" : "Handled"}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div className="rounded-lg border border-[var(--surface-border)] px-3 py-2">
+                          <p className="text-[var(--muted)]">Meals</p>
+                          <p className="mt-1 font-semibold text-[var(--foreground)]">{client.meals_today}</p>
+                        </div>
+                        <div className="rounded-lg border border-[var(--surface-border)] px-3 py-2">
+                          <p className="text-[var(--muted)]">Check-in</p>
+                          <p className="mt-1 truncate font-semibold text-[var(--foreground)]">{client.check_in_status}</p>
+                        </div>
+                        <div className="rounded-lg border border-[var(--surface-border)] px-3 py-2">
+                          <p className="text-[var(--muted)]">Activity</p>
+                          <p className="mt-1 truncate font-semibold text-[var(--foreground)]">{formatLastActivity(client)}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {visibleBadges.length > 0 ? visibleBadges.map((badge) => {
+                          const Icon = badge.icon
+                          return (
+                            <Badge key={badge.label} variant={badge.variant}>
+                              <Icon size={12} />
+                              {badge.label}
+                            </Badge>
+                          )
+                        }) : (
+                          <Badge variant="success">
+                            <CheckCircle2 size={12} />
+                            No new updates
+                          </Badge>
+                        )}
+                        {hiddenBadgeCount > 0 ? <Badge variant="outline">+{hiddenBadgeCount} more</Badge> : null}
+                      </div>
+                    </CardContent>
+                  </Card>
                 </Link>
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
+              )
+            })}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-[var(--muted)]">No active clients yet.</CardContent>
+          </Card>
+        )}
       </DashboardSection>
 
-      <DashboardSection title="Attention feed">
+      <DashboardSection title="Needs trainer attention">
         <Card>
           {attentionClients.length > 0 ? (
             <div className="divide-y divide-[var(--surface-border)]">
-              {attentionClients.map((client) => {
-                const reasons = [
-                  client.total_meals_logged_today === 0 ? "No meals logged today" : null,
-                  client.active_strike_count > 0
-                    ? `${client.active_strike_count} active risk strike${client.active_strike_count === 1 ? "" : "s"}`
-                    : null,
-                ].filter((reason): reason is string => Boolean(reason))
-
-                return (
-                  <Link
-                    key={client.client_id}
-                    href={`/dashboard/clients/${client.client_id}`}
-                    className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-overlay)]"
-                  >
-                    <AlertTriangle size={16} className="shrink-0 text-amber-500" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-[var(--foreground)]">{client.client_name}</p>
-                      <p className="mt-0.5 text-xs text-[var(--muted)]">{reasons.join(" · ")}</p>
-                    </div>
-                    <Badge variant="warning">Review</Badge>
-                    <ChevronRight size={14} className="shrink-0 text-[var(--muted)]" />
-                  </Link>
-                )
-              })}
+              {attentionClients.slice(0, 8).map(({ client }) => (
+                <Link
+                  key={client.client_id}
+                  href={`/dashboard/clients/${client.client_id}`}
+                  className="grid gap-2 px-5 py-4 transition-colors hover:bg-[var(--surface-overlay)] sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_auto] sm:items-center"
+                >
+                  <p className="truncate text-sm font-semibold text-[var(--foreground)]">{client.client_name}</p>
+                  <p className="text-xs text-[var(--muted)]">{primaryReason(client)}</p>
+                  <p className="truncate text-xs text-[var(--muted)]">{formatLastActivity(client)}</p>
+                  <span className="inline-flex items-center gap-2 text-xs font-medium text-brand-600">
+                    Review
+                    <ChevronRight size={14} />
+                  </span>
+                </Link>
+              ))}
             </div>
           ) : (
             <CardContent className="flex items-center gap-3 py-7">
-              <ClipboardCheck size={18} className="text-emerald-500" />
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">No clients need attention right now.</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">New missed logs and risk indicators will appear here.</p>
-              </div>
+              <CheckCircle2 size={18} className="text-emerald-500" />
+              <p className="text-sm font-medium text-[var(--foreground)]">Everything is handled for now.</p>
             </CardContent>
           )}
         </Card>
       </DashboardSection>
 
-      <DashboardSection title="Client snapshot">
+      <DashboardSection
+        title="Reports"
+        actions={(
+          <div className="flex items-center gap-2">
+            {reportsReady > 0 ? <Badge variant="info">{plural(reportsReady, "report ready", "reports ready")}</Badge> : null}
+            <Link href="/dashboard/reports" className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
+              Open reports
+              <ChevronRight size={14} />
+            </Link>
+          </div>
+        )}
+      >
         <Card>
-          {data.clients.length > 0 ? (
+          {reportSummaries.length > 0 ? (
             <div className="divide-y divide-[var(--surface-border)]">
-              {data.clients.slice(0, 8).map((client) => {
-                const summary = summaryByClient.get(client.client_id)
-                const needsAttention = attentionClients.some((item) => item.client_id === client.client_id)
+              {reportSummaries.slice(0, 4).map((report) => {
+                const client = clients.find((item) => item.client_id === report.client_id)
                 return (
                   <Link
-                    key={client.client_id}
-                    href={`/dashboard/clients/${client.client_id}`}
-                    className="grid gap-2 px-5 py-4 transition-colors hover:bg-[var(--surface-overlay)] sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_auto] sm:items-center"
+                    key={report.client_id}
+                    href="/dashboard/reports"
+                    className="flex items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-overlay)]"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">{client.client_name}</p>
-                      <p className="mt-0.5 text-xs capitalize text-[var(--muted)]">{formatGoal(summary?.goal_type)}</p>
+                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">{client?.client_name ?? "Client"}</p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">{report.label ?? "Report ready"}</p>
                     </div>
-                    <p className="text-xs text-[var(--muted)]">
-                      {client.total_meals_logged_today} meal{client.total_meals_logged_today === 1 ? "" : "s"} today
-                    </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {summary?.last_logged ? formatRelativeDate(summary.last_logged) : "No activity today"}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      {needsAttention ? <Badge variant="warning">Attention</Badge> : <Badge variant="success">On track</Badge>}
-                      <ChevronRight size={14} className="text-[var(--muted)]" />
-                    </div>
+                    <Badge variant="info">{plural(report.ready_count, "report ready", "reports ready")}</Badge>
                   </Link>
                 )
               })}
             </div>
           ) : (
-            <CardContent className="py-8 text-center text-sm text-[var(--muted)]">No active clients yet.</CardContent>
+            <CardContent className="py-7 text-sm text-[var(--muted)]">
+              Reports will appear here once clients have enough logged data.
+            </CardContent>
           )}
         </Card>
       </DashboardSection>

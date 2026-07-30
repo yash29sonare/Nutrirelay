@@ -19,7 +19,15 @@ export interface ClientSummaryCard {
   status_color: string
   meals_today: number
   last_logged: string | null
+  last_activity_at: string | null
+  last_activity_label: string | null
   active_strikes: number
+  pending_food_reviews: number
+  pending_photo_reviews: number
+  pending_voice_reviews: number
+  pending_reply_reviews: number
+  pending_updates: number
+  check_in_status: string
 }
 
 export interface ClientDetail {
@@ -127,6 +135,46 @@ function metadataString(metadata: Record<string, any> | null, keys: string[]): s
     if (typeof value === "string" && value.trim()) return value.trim()
   }
   return null
+}
+
+function metadataBoolean(metadata: Record<string, any> | null, keys: string[]): boolean {
+  for (const key of keys) {
+    if (metadata?.[key] === true) return true
+  }
+  return false
+}
+
+function needsTrainerReview(value: unknown): boolean {
+  if (typeof value !== "string") return false
+  return ["needs_review", "review_needed", "pending", "failed", "error"].includes(value.toLowerCase())
+}
+
+function metadataNeedsReview(metadata: Record<string, any> | null): boolean {
+  if (!metadata) return false
+  const structured = metadata.structured_response && typeof metadata.structured_response === "object"
+    ? metadata.structured_response as Record<string, any>
+    : null
+
+  return metadataBoolean(metadata, ["needs_review", "requires_review", "trainer_review_required"])
+    || metadataBoolean(structured, ["needs_review", "requires_review", "trainer_review_required"])
+    || needsTrainerReview(metadataString(metadata, ["parser_status", "processing_status", "automation_state", "status"]))
+}
+
+function setLatestActivity(
+  activities: Map<string, { at: string; label: string }>,
+  clientId: string,
+  at: string | null,
+  label: string,
+) {
+  if (!at) return
+  const current = activities.get(clientId)
+  if (!current || at > current.at) {
+    activities.set(clientId, { at, label })
+  }
+}
+
+function incrementCount(counts: Map<string, number>, clientId: string, amount = 1) {
+  counts.set(clientId, (counts.get(clientId) ?? 0) + amount)
 }
 
 function statusTimestamp(row: {
@@ -246,8 +294,11 @@ export async function getTrainerClientSummaries(trainerId: string): Promise<Clie
   if (!tc || tc.length === 0) return []
 
   const clientIds = tc.map((r: Record<string, any>) => r.client_id)
+  const today = new Date().toISOString().slice(0, 10)
+  const lookbackIso = new Date(Date.now() - 14 * MS_PER_DAY).toISOString()
+  const communicationLimit = Math.min(Math.max(clientIds.length * 20, 50), 500)
 
-  const [profilesRes, goalsRes, complianceRes, todayMealsRes, strikesRes] = await Promise.all([
+  const [profilesRes, goalsRes, complianceRes, todayMealsRes, recentFoodRes, communicationsRes, voiceNotesRes, strikesRes] = await Promise.all([
     db.from("profiles").select("id, full_name").in("id", clientIds),
     db.from("client_goals").select("client_id, goal_type").in("client_id", clientIds).eq("goal_status", "ACTIVE"),
     db.from("client_compliance_snapshots")
@@ -256,8 +307,27 @@ export async function getTrainerClientSummaries(trainerId: string): Promise<Clie
       .order("calculated_at", { ascending: false }),
     db.from("food_logs")
       .select("client_id, logged_at")
+      .eq("trainer_id", trainerId)
       .in("client_id", clientIds)
-      .gte("logged_at", new Date().toISOString().slice(0, 10)),
+      .gte("logged_at", today),
+    db.from("food_logs")
+      .select("client_id, logged_at, review_state, verification_status, wam_id")
+      .eq("trainer_id", trainerId)
+      .in("client_id", clientIds)
+      .gte("logged_at", lookbackIso),
+    db.from("communication_logs")
+      .select("client_id, direction, message_type, message_timestamp, wam_id, metadata")
+      .eq("trainer_id", trainerId)
+      .in("client_id", clientIds)
+      .gte("message_timestamp", lookbackIso)
+      .order("message_timestamp", { ascending: false })
+      .limit(communicationLimit),
+    db.from("voice_notes")
+      .select("client_id, created_at, processing_status, transcript")
+      .in("client_id", clientIds)
+      .gte("created_at", lookbackIso)
+      .order("created_at", { ascending: false })
+      .limit(communicationLimit),
     db.from("strike_log").select("profile_id").in("profile_id", clientIds),
   ])
 
@@ -265,6 +335,27 @@ export async function getTrainerClientSummaries(trainerId: string): Promise<Clie
   const goals = (goalsRes.data ?? []) as Array<{ client_id: string; goal_type: string }>
   const compliance = (complianceRes.data ?? []) as Array<{ client_id: string; compliance_score: number; status_color: string }>
   const todayMeals = (todayMealsRes.data ?? []) as Array<{ client_id: string; logged_at: string }>
+  const recentFoodLogs = (recentFoodRes.data ?? []) as Array<{
+    client_id: string
+    logged_at: string
+    review_state: string | null
+    verification_status: string | null
+    wam_id: string | null
+  }>
+  const communications = (communicationsRes.data ?? []) as Array<{
+    client_id: string
+    direction: string
+    message_type: string
+    message_timestamp: string
+    wam_id: string | null
+    metadata: Record<string, any> | null
+  }>
+  const voiceNotes = (voiceNotesRes.data ?? []) as Array<{
+    client_id: string
+    created_at: string
+    processing_status: string | null
+    transcript: string | null
+  }>
   const strikes = (strikesRes.data ?? []) as Array<{ profile_id: string }>
 
   const goalMap = new Map(goals.map((g) => [g.client_id, g.goal_type]))
@@ -274,11 +365,55 @@ export async function getTrainerClientSummaries(trainerId: string): Promise<Clie
     todayMealCount.set(m.client_id, (todayMealCount.get(m.client_id) ?? 0) + 1)
   }
   const lastLog = new Map<string, string>()
+  const latestActivity = new Map<string, { at: string; label: string }>()
   for (const m of todayMeals) {
     if (!lastLog.has(m.client_id) || m.logged_at > lastLog.get(m.client_id)!) {
       lastLog.set(m.client_id, m.logged_at)
     }
+    setLatestActivity(latestActivity, m.client_id, m.logged_at, "Meal log")
   }
+
+  const pendingFoodReviews = new Map<string, number>()
+  const pendingFoodWamIdsByClient = new Map<string, Set<string>>()
+  for (const meal of recentFoodLogs) {
+    setLatestActivity(latestActivity, meal.client_id, meal.logged_at, "Meal log")
+    const needsReview = needsTrainerReview(meal.review_state) || needsTrainerReview(meal.verification_status)
+    if (!needsReview) continue
+    incrementCount(pendingFoodReviews, meal.client_id)
+    if (meal.wam_id) {
+      const wamIds = pendingFoodWamIdsByClient.get(meal.client_id) ?? new Set<string>()
+      wamIds.add(meal.wam_id)
+      pendingFoodWamIdsByClient.set(meal.client_id, wamIds)
+    }
+  }
+
+  const pendingPhotoReviews = new Map<string, number>()
+  const pendingReplyReviews = new Map<string, number>()
+  for (const message of communications) {
+    setLatestActivity(latestActivity, message.client_id, message.message_timestamp, "WhatsApp message")
+    if (message.direction !== "INBOUND") continue
+
+    const pendingFoodWamIds = pendingFoodWamIdsByClient.get(message.client_id)
+    const linkedPendingImageFoodLog =
+      message.message_type === "IMAGE" && Boolean(message.wam_id && pendingFoodWamIds?.has(message.wam_id))
+    const metadataReview = metadataNeedsReview(message.metadata)
+
+    if (message.message_type === "IMAGE" && (metadataReview || linkedPendingImageFoodLog)) {
+      incrementCount(pendingPhotoReviews, message.client_id)
+    }
+    if (message.message_type !== "IMAGE" && metadataReview) {
+      incrementCount(pendingReplyReviews, message.client_id)
+    }
+  }
+
+  const pendingVoiceReviews = new Map<string, number>()
+  for (const note of voiceNotes) {
+    setLatestActivity(latestActivity, note.client_id, note.created_at, "Voice note")
+    if (needsTrainerReview(note.processing_status)) {
+      incrementCount(pendingVoiceReviews, note.client_id)
+    }
+  }
+
   const strikeCount = new Map<string, number>()
   for (const s of strikes) {
     strikeCount.set(s.profile_id, (strikeCount.get(s.profile_id) ?? 0) + 1)
@@ -296,7 +431,19 @@ export async function getTrainerClientSummaries(trainerId: string): Promise<Clie
       status_color: comp?.status_color ?? "GREEN",
       meals_today: todayMealCount.get(id) ?? 0,
       last_logged: lastLog.get(id) ?? null,
+      last_activity_at: latestActivity.get(id)?.at ?? null,
+      last_activity_label: latestActivity.get(id)?.label ?? null,
       active_strikes: strikeCount.get(id) ?? 0,
+      pending_food_reviews: pendingFoodReviews.get(id) ?? 0,
+      pending_photo_reviews: pendingPhotoReviews.get(id) ?? 0,
+      pending_voice_reviews: pendingVoiceReviews.get(id) ?? 0,
+      pending_reply_reviews: pendingReplyReviews.get(id) ?? 0,
+      pending_updates:
+        (pendingFoodReviews.get(id) ?? 0)
+        + (pendingPhotoReviews.get(id) ?? 0)
+        + (pendingVoiceReviews.get(id) ?? 0)
+        + (pendingReplyReviews.get(id) ?? 0),
+      check_in_status: (todayMealCount.get(id) ?? 0) > 0 ? "Checked in today" : "No meal today",
     }
   })
 }

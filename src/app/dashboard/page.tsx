@@ -14,7 +14,7 @@ import { getActionKey } from "@/lib/engagement/actionKey";
 import { computeOutcomeFromEvents } from "@/lib/outcomes/eventOutcomeEngine";
 import { generateInsightsFromEvents } from "@/lib/ai/engagementAI";
 import { getTrainerClientSummaries } from "@/lib/dashboard-reads";
-import { getTrainerReportsCenterData } from "@/lib/reports/report-center";
+import { getTrainerReportsCenterData, type ReportStatus } from "@/lib/reports/report-center";
 
 function EmptyRoster({ message }: { message: string }) {
   return (
@@ -28,6 +28,10 @@ function EmptyRoster({ message }: { message: string }) {
       </DashboardSection>
     </PageContainer>
   );
+}
+
+function countsAsReadyReport(status: ReportStatus): boolean {
+  return status === "ready" || status === "partial";
 }
 
 export default async function DashboardPage() {
@@ -102,8 +106,28 @@ export default async function DashboardPage() {
   generateInsightsFromEvents(events);
 
   const userName = (user?.user_metadata?.display_name as string) ?? null;
-  const reportsReady = reportsCenter
-    ? reportsCenter.weeklyReports.filter((report) => report.status !== "no_data").length
+  const reportSummaries = reportsCenter
+    ? reportsCenter.clients.map((client) => {
+      const weeklyReport = reportsCenter.weeklyReports.find((report) => report.client.id === client.id);
+      const monthlyReport = reportsCenter.monthlyReports.find((report) => report.client.id === client.id);
+      const readyLabels = [
+        weeklyReport && countsAsReadyReport(weeklyReport.status) ? "Weekly" : null,
+        monthlyReport && countsAsReadyReport(monthlyReport.status) ? "Monthly" : null,
+      ].filter((label): label is string => Boolean(label));
+
+      return {
+        client_id: client.id,
+        ready_count: readyLabels.length,
+        label: readyLabels.length > 0 ? `${readyLabels.join(" and ")} ready` : null,
+      };
+    }).filter((summary) => summary.ready_count > 0)
+    : [];
+  const reportsReady = reportSummaries.reduce((total, summary) => total + summary.ready_count, 0);
+  const whatsappConnection = reportsCenter
+    ? {
+      connected: reportsCenter.wabaStatus.status === "connected" && reportsCenter.wabaStatus.hasPhoneNumberId,
+      status: reportsCenter.wabaStatus.status,
+    }
     : null;
 
   return (
@@ -111,7 +135,9 @@ export default async function DashboardPage() {
       <WorkspaceDashboard
         data={dto}
         clientSummaries={clientSummaries}
+        reportSummaries={reportSummaries}
         reportsReady={reportsReady}
+        whatsappConnection={whatsappConnection}
         userName={userName}
       />
     </PageContainer>
