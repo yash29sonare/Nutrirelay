@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState"
 import { ErrorState } from "@/components/ui/ErrorState"
 import { InlineNotice } from "@/components/ui/InlineNotice"
 import {
-  ArrowLeft, AlertTriangle, CalendarClock, CheckCheck, ChevronLeft, ChevronRight, Dumbbell, Goal, History, MessageSquare,
+  ArrowLeft, AlertTriangle, CalendarClock, CheckCheck, Dumbbell, Goal, History, MessageSquare,
 } from "lucide-react"
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getClientById } from "@/lib/operations/clients"
@@ -29,6 +29,7 @@ import type { TimelineEntry } from "@/types/timeline"
 import { ClientTimeline } from "./components/ClientTimeline"
 import { MealHistory } from "./components/MealHistory"
 import { ClientNameEditor } from "./components/ClientNameEditor"
+import { DailyReviewNav } from "./components/DailyReviewNav"
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
 import { buildTimeline } from "@/lib/timeline/timelineEngine"
 
@@ -93,22 +94,25 @@ function groupMediaByDate<T extends { message_timestamp: string }>(items: T[]) {
 }
 
 function dateKeyFromDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 function parseDateKey(value: string | undefined): string {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return dateKeyFromDate(new Date())
-  const date = new Date(`${value}T00:00:00.000Z`)
+  const date = dateFromKey(value)
   return Number.isNaN(date.getTime()) ? dateKeyFromDate(new Date()) : value
 }
 
 function dateFromKey(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`)
+  return new Date(`${value}T12:00:00`)
 }
 
 function addDays(value: string, days: number): string {
   const date = dateFromKey(value)
-  date.setUTCDate(date.getUTCDate() + days)
+  date.setDate(date.getDate() + days)
   return dateKeyFromDate(date)
 }
 
@@ -127,6 +131,55 @@ function routinePart(label: string, value: unknown): string | null {
   return formatted ? `${label} ${formatted}` : null
 }
 
+function toTitleCase(value: string): string {
+  return value.replace(/\b\w+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+}
+
+function humanizeValue(value: unknown, fallback = "Not set"): string {
+  if (value === null || value === undefined || value === "") return fallback
+  if (Array.isArray(value)) {
+    const values = value.map((item) => humanizeValue(item, "")).filter(Boolean)
+    return values.length > 0 ? values.join(", ") : fallback
+  }
+  const text = String(value).trim()
+  if (!text) return fallback
+  return toTitleCase(text.replace(/[_-]+/g, " ").replace(/\s+/g, " "))
+}
+
+function sentenceValue(value: unknown, fallback = "Not set"): string {
+  if (Array.isArray(value)) return humanizeValue(value, fallback)
+  if (typeof value === "string" && value.trim()) return value.trim().replace(/[_-]+/g, " ")
+  return humanizeValue(value, fallback)
+}
+
+function formatDietLabel(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "Not set"
+  const normalized = value.toLowerCase()
+  const labels: Record<string, string> = {
+    veg_eggs_allowed: "Vegetarian, eggs allowed",
+    vegetarian: "Vegetarian",
+    non_vegetarian: "Non-vegetarian",
+    vegan: "Vegan",
+    eggetarian: "Eggetarian",
+  }
+  return labels[normalized] ?? humanizeValue(value)
+}
+
+function hasListValue(record: Record<string, unknown> | null | undefined, key: string, expectedValue: string): boolean {
+  const value = record?.[key]
+  return Array.isArray(value) && value.includes(expectedValue)
+}
+
+function formatRoutineSummary(workout: Record<string, unknown> | null | undefined, onboarding: Record<string, unknown> | null | undefined) {
+  const parts = [
+    hasListValue(onboarding, "skipped_meals", "breakfast") ? "Breakfast skipped" : routinePart("Breakfast", workout?.breakfast_time),
+    routinePart("Lunch", workout?.lunch_time),
+    routinePart("Snack", workout?.snack_time),
+    routinePart("Dinner", workout?.dinner_time),
+  ].filter(Boolean)
+  return parts.join(", ") || "Not set"
+}
+
 function sumMeals(meals: MealRecord[]) {
   return meals.reduce(
     (acc, meal) => ({
@@ -141,23 +194,17 @@ function sumMeals(meals: MealRecord[]) {
 
 function formatGoalType(value: unknown): string {
   if (typeof value !== "string" || !value) return "No active goal"
-  return value.toLowerCase().replace(/_/g, " ").replace(/^\w/, (letter) => letter.toUpperCase())
+  return humanizeValue(value)
 }
 
-function valueText(record: Record<string, any> | null | undefined, key: string, fallback = "Not set") {
+function valueText(record: Record<string, unknown> | null | undefined, key: string, fallback = "Not set") {
   const value = record?.[key]
   if (value === null || value === undefined || value === "") return fallback
   if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : fallback
   return String(value)
 }
 
-function listText(value: unknown, fallback = "Not set") {
-  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : fallback
-  if (typeof value === "string" && value.trim()) return value
-  return fallback
-}
-
-function computeBmi(health: Record<string, any> | null): string | null {
+function computeBmi(health: Record<string, unknown> | null): string | null {
   const heightCm = Number(health?.height_cm ?? 0)
   const weightKg = Number(health?.weight_kg ?? 0)
   if (!heightCm || !weightKg) return null
@@ -215,9 +262,9 @@ function statusVariant(status: string): "success" | "warning" | "danger" | "info
 
 function messageTypeLabel(message: ClientWhatsAppMessage) {
   if (message.direction === "OUTBOUND" && message.message_type === "TEXT" && message.display_text.startsWith("Logged:")) {
-    return "AUTO_REPLY"
+    return "Auto reply"
   }
-  return message.message_type
+  return humanizeValue(message.message_type)
 }
 
 function isRelevantConversationMessage(message: ClientWhatsAppMessage): boolean {
@@ -234,13 +281,13 @@ function mediaReadinessText(message: ClientWhatsAppMessage): string | null {
   const isMediaType = ["IMAGE", "AUDIO", "VOICE", "VIDEO", "DOCUMENT", "MEDIA"].includes(type)
   if (!isMediaType && !message.media_kind && !message.parser_status && !message.skip_reason) return null
 
-  const mediaLabel = message.media_kind ? message.media_kind.replace(/_/g, " ") : type.toLowerCase()
+  const mediaLabel = message.media_kind ? humanizeValue(message.media_kind).toLowerCase() : type.toLowerCase()
   const storageState = message.has_media_url ? "media reference saved" : "metadata only"
   const transcriptState = type === "AUDIO" || type === "VOICE"
     ? message.has_transcript ? "transcript available" : "no transcript saved"
     : null
-  const parserState = message.parser_status ? `parser state: ${message.parser_status.replace(/_/g, " ")}` : null
-  const skipState = message.skip_reason ? `skip reason: ${message.skip_reason.replace(/_/g, " ")}` : null
+  const parserState = message.parser_status ? `parser state: ${humanizeValue(message.parser_status).toLowerCase()}` : null
+  const skipState = message.skip_reason ? `skip reason: ${humanizeValue(message.skip_reason).toLowerCase()}` : null
 
   return [mediaLabel, storageState, transcriptState, parserState, skipState].filter(Boolean).join(" · ")
 }
@@ -264,11 +311,11 @@ function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMes
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={message.direction === "INBOUND" ? "info" : "outline"}>
-                        {message.direction}
+                        {humanizeValue(message.direction)}
                       </Badge>
                       <Badge variant="outline">{messageTypeLabel(message)}</Badge>
                       <Badge variant={statusVariant(message.latest_status)}>
-                        {message.latest_status}
+                        {humanizeValue(message.latest_status)}
                       </Badge>
                     </div>
                     <span className="text-xs text-[var(--muted)]">
@@ -291,7 +338,7 @@ function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMes
                       <div className="flex flex-wrap items-center gap-2 text-[var(--foreground)]">
                         <MessageSquare size={13} />
                         <span className="font-medium">Linked food log</span>
-                        <Badge variant="outline">{message.food_log.review_state ?? "review_state unknown"}</Badge>
+                        <Badge variant="outline">{humanizeValue(message.food_log.review_state, "Review state unknown")}</Badge>
                       </div>
                       <p className="mt-1">
                         {message.food_log.notes ?? "Food log created from this WhatsApp message"}
@@ -311,7 +358,7 @@ function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMes
                       <div className="mt-2 flex flex-wrap gap-2">
                         {message.status_history.map((status) => (
                           <Badge key={`${message.id}-${status.status}-${status.timestamp ?? "no-time"}`} variant={statusVariant(status.status)}>
-                            {status.status}{status.timestamp ? ` · ${formatDateTime(status.timestamp)}` : ""}
+                            {humanizeValue(status.status)}{status.timestamp ? ` · ${formatDateTime(status.timestamp)}` : ""}
                           </Badge>
                         ))}
                       </div>
@@ -453,6 +500,17 @@ export default async function ClientDetailPage({
   const mediaByDate = groupMediaByDate(selectedPhotoMedia)
   const bmi = computeBmi(health)
   const latestActivityEntries = buildTimeline([eventEntries, stateEntries, mealEntries]).slice(0, 2)
+  const onboardingStatus = humanizeValue(onboarding?.status, "Not started")
+  const onboardingStep = humanizeValue(onboarding?.current_step, "Not started")
+  const missingFields = humanizeValue(onboarding?.missing_fields ?? [], "None")
+  const dietPreference = formatDietLabel(health?.diet_type ?? preferences?.diet_type ?? preferences?.preference)
+  const allergySummary = sentenceValue(health?.allergies, "None")
+  const restrictionSummary = sentenceValue(preferences?.dislikes ?? health?.food_restrictions, "Not set")
+  const mealRoutineSummary = formatRoutineSummary(workout, onboarding)
+  const workoutTimeSummary = formatTime12Hour(workout?.workout_time) ?? "Not set"
+  const workoutDaysSummary = humanizeValue(workout?.workout_days ?? [], "Workout days not set")
+  const checkinSummary = formatTime12Hour(workout?.preferred_checkin_time) ?? humanizeValue(workout?.checkin_preference, "Not set")
+  const restDaysSummary = humanizeValue(workout?.rest_days ?? [], "Not set")
 
   return (
     <PageContainer>
@@ -527,7 +585,7 @@ export default async function ClientDetailPage({
                 <div>
                   <p className="text-sm font-semibold text-[var(--foreground)]">Client profile</p>
                   <p className="text-xs text-[var(--muted)]">
-                    {onboarding?.status?.replace(/_/g, " ") ?? "Not started"} · Step: {onboarding?.current_step?.replace(/_/g, " ") ?? "height"}
+                    {onboardingStatus} · Step: {onboardingStep}
                   </p>
                 </div>
               </div>
@@ -547,7 +605,7 @@ export default async function ClientDetailPage({
                 <div>
                   <p className="text-xs text-[var(--muted)]">Missing</p>
                   <p className="font-medium text-[var(--foreground)]">
-                    {onboarding?.missing_fields?.length ? onboarding.missing_fields.join(", ") : "None"}
+                    {missingFields}
                   </p>
                 </div>
               </div>
@@ -592,19 +650,25 @@ export default async function ClientDetailPage({
         >
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card>
-              <CardContent className="space-y-3">
-                <p className="text-sm font-semibold text-[var(--foreground)]">Health profile</p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+              <CardContent className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs text-[var(--muted)]">Status</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {onboarding?.status?.replace(/_/g, " ") ?? "Not started"}
-                    </p>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Health profile</p>
+                    <p className="text-xs text-[var(--muted)]">Core measurements and setup status</p>
                   </div>
+                  <Badge variant={onboardingStatus === "Completed" ? "success" : "outline"}>{onboardingStatus}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-[var(--muted)]">Current step</p>
                     <p className="font-medium text-[var(--foreground)]">
-                      {onboarding?.current_step?.replace(/_/g, " ") ?? "Not started"}
+                      {onboardingStep}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">BMI</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {bmi ?? "Not enough data"}
                     </p>
                   </div>
                   <div>
@@ -617,63 +681,55 @@ export default async function ClientDetailPage({
                   </div>
                 </div>
                 <p className="text-xs leading-5 text-[var(--muted)]">
-                  Missing fields: {onboarding?.missing_fields?.length ? onboarding.missing_fields.join(", ") : "None"}
+                  Missing fields: {missingFields}
                 </p>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="space-y-3">
-                <p className="text-sm font-semibold text-[var(--foreground)]">Nutrition preferences</p>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">Nutrition preferences</p>
+                  <p className="text-xs text-[var(--muted)]">Diet choices used for meal guidance</p>
+                </div>
                 <div className="grid grid-cols-1 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-[var(--muted)]">Diet preference</p>
                     <p className="font-medium text-[var(--foreground)]">
-                      {valueText(health, "diet_type", valueText(preferences, "diet_type", valueText(preferences, "preference")))}
+                      {dietPreference}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-[var(--muted)]">Allergies</p>
-                    <p className="font-medium text-[var(--foreground)]">{listText(health?.allergies, "None")}</p>
+                    <p className="font-medium leading-6 text-[var(--foreground)]">{allergySummary}</p>
                   </div>
                   <div>
                     <p className="text-xs text-[var(--muted)]">Dislikes / restrictions</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {valueText(preferences, "dislikes", valueText(health, "food_restrictions", "Not set"))}
-                    </p>
+                    <p className="font-medium leading-6 text-[var(--foreground)]">{restrictionSummary}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="space-y-3">
-                <p className="text-sm font-semibold text-[var(--foreground)]">Routine and check-in</p>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">Routine and check-in</p>
+                  <p className="text-xs text-[var(--muted)]">Daily timing saved from onboarding</p>
+                </div>
                 <div className="grid grid-cols-1 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-[var(--muted)]">Meal routine</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {[
-                        onboarding?.skipped_meals?.includes("breakfast") ? "Breakfast skipped" : routinePart("Breakfast", workout?.breakfast_time),
-                        routinePart("Lunch", workout?.lunch_time),
-                        routinePart("Snack", workout?.snack_time),
-                        routinePart("Dinner", workout?.dinner_time),
-                      ].filter(Boolean).join(", ") || "Not set"}
-                    </p>
+                    <p className="font-medium leading-6 text-[var(--foreground)]">{mealRoutineSummary}</p>
                   </div>
                   <div>
                     <p className="text-xs text-[var(--muted)]">Workout schedule</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {[
-                        valueText(workout, "workout_time", ""),
-                        listText(workout?.workout_days, ""),
-                      ].filter(Boolean).join(" · ") || "Not set"}
-                    </p>
+                    <p className="font-medium text-[var(--foreground)]">{workoutTimeSummary} · {workoutDaysSummary}</p>
                   </div>
                   <div>
                     <p className="text-xs text-[var(--muted)]">Check-in</p>
                     <p className="font-medium text-[var(--foreground)]">
-                      {valueText(workout, "checkin_preference", valueText(workout, "preferred_checkin_time"))}
+                      {checkinSummary}
                     </p>
                   </div>
                 </div>
@@ -690,28 +746,13 @@ export default async function ClientDetailPage({
                 Showing macros, photos, and timeline for {formatDate(selectedDate)}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href={`/dashboard/clients/${id}?date=${previousDateKey}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--surface-border)] px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
-              >
-                <ChevronLeft size={14} />
-                Previous day
-              </Link>
-              <Link
-                href={`/dashboard/clients/${id}?date=${todayDateKey}`}
-                className="inline-flex items-center rounded-lg border border-[var(--surface-border)] px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
-              >
-                Today
-              </Link>
-              <Link
-                href={`/dashboard/clients/${id}?date=${nextDateKey}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--surface-border)] px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-overlay)]"
-              >
-                Next day
-                <ChevronRight size={14} />
-              </Link>
-            </div>
+            <DailyReviewNav
+              clientId={id}
+              selectedDateKey={selectedDateKey}
+              previousDateKey={previousDateKey}
+              nextDateKey={nextDateKey}
+              todayDateKey={todayDateKey}
+            />
           </CardContent>
         </Card>
 
@@ -811,7 +852,7 @@ export default async function ClientDetailPage({
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">
-                  Check-in {formatTime12Hour(workout?.preferred_checkin_time) ?? valueText(workout, "checkin_preference")}
+                  Check-in {checkinSummary}
                 </Badge>
                 <Badge variant="outline">
                   {[routinePart("B", workout?.breakfast_time), routinePart("L", workout?.lunch_time), routinePart("S", workout?.snack_time), routinePart("D", workout?.dinner_time)]
@@ -819,10 +860,10 @@ export default async function ClientDetailPage({
                     .join(" · ") || "Meal routine not set"}
                 </Badge>
                 <Badge variant="outline">
-                  Rest {Array.isArray(workout?.rest_days) && workout.rest_days.length > 0 ? workout.rest_days.join(", ") : "not set"}
+                  Rest {restDaysSummary.toLowerCase()}
                 </Badge>
                 <Badge variant="outline">
-                  Workout days {Array.isArray(workout?.workout_days) && workout.workout_days.length > 0 ? workout.workout_days.join(", ") : "not set"}
+                  {workoutDaysSummary === "Workout days not set" ? workoutDaysSummary : `Workout days ${workoutDaysSummary.toLowerCase()}`}
                 </Badge>
               </div>
             </CardContent>

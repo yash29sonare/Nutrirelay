@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getClientDetail } from "@/lib/dashboard-reads"
 import { activateClient, pauseClient, archiveClient, restoreClient } from "@/lib/operations/client-lifecycle"
-import { requireTrainer, unauthorized } from "@/lib/api-auth"
+import { requireTrainer, requireTrainerContext, unauthorized } from "@/lib/api-auth"
 import { createServiceDb, verifyClientOwnership } from "@/lib/ownership"
 
 export const dynamic = "force-dynamic"
@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ cl
   }
 
   try {
-    const trainerId = await requireTrainer()
+    const { authUserId: trainerProfileId, trainerId } = await requireTrainerContext()
     let result
     switch (action) {
       case "activate":
@@ -62,7 +62,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ cl
         }
 
         const db = createServiceDb()
-        const ownsClient = await verifyClientOwnership(db, clientId, trainerId)
+        const ownsClient = await verifyClientOwnership(db, clientId, trainerProfileId)
         if (!ownsClient) {
           return NextResponse.json({ error: "Client not found or not owned by trainer" }, { status: 404 })
         }
