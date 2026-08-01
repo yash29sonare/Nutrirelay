@@ -147,7 +147,12 @@ function humanizeValue(value: unknown, fallback = "Not set"): string {
 }
 
 function sentenceValue(value: unknown, fallback = "Not set"): string {
-  if (Array.isArray(value)) return humanizeValue(value, fallback)
+  if (Array.isArray(value)) {
+    const values = value
+      .map((item) => (typeof item === "string" ? item.trim().replace(/[_-]+/g, " ") : humanizeValue(item, "")))
+      .filter(Boolean)
+    return values.length > 0 ? values.join(", ") : fallback
+  }
   if (typeof value === "string" && value.trim()) return value.trim().replace(/[_-]+/g, " ")
   return humanizeValue(value, fallback)
 }
