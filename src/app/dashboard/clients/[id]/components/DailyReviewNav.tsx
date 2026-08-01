@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { Button } from "@/components/ui/Button"
+import { cn } from "@/lib/utils"
 
 interface DailyReviewNavProps {
   clientId: string
@@ -17,6 +18,17 @@ function reviewHref(clientId: string, dateKey: string) {
   return `/dashboard/clients/${clientId}?date=${dateKey}`
 }
 
+const navItemClassName = cn(
+  "inline-flex items-center justify-center font-medium transition-all duration-150",
+  "bg-transparent text-[var(--foreground)] border border-[var(--surface-border)] hover:bg-white/5",
+  "px-3 py-1.5 text-xs rounded-md gap-1.5"
+)
+
+const disabledNavItemClassName = cn(
+  navItemClassName,
+  "opacity-50 cursor-not-allowed hover:bg-transparent"
+)
+
 export function DailyReviewNav({
   clientId,
   selectedDateKey,
@@ -25,60 +37,46 @@ export function DailyReviewNav({
   todayDateKey,
 }: DailyReviewNavProps) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [pendingDateKey, setPendingDateKey] = useState<string | null>(null)
   const nextDisabled = selectedDateKey >= todayDateKey
+  const todayDisabled = selectedDateKey === todayDateKey
+  const previousHref = reviewHref(clientId, previousDateKey)
+  const todayHref = reviewHref(clientId, todayDateKey)
+  const nextHref = reviewHref(clientId, nextDateKey)
 
   useEffect(() => {
-    router.prefetch(reviewHref(clientId, previousDateKey))
-    router.prefetch(reviewHref(clientId, todayDateKey))
+    router.prefetch(previousHref)
+    router.prefetch(todayHref)
     if (!nextDisabled) {
-      router.prefetch(reviewHref(clientId, nextDateKey))
+      router.prefetch(nextHref)
     }
-  }, [clientId, nextDateKey, nextDisabled, previousDateKey, router, todayDateKey])
-
-  function goTo(dateKey: string) {
-    if (dateKey === selectedDateKey) return
-    setPendingDateKey(dateKey)
-    startTransition(() => {
-      router.push(reviewHref(clientId, dateKey))
-    })
-  }
+  }, [nextDisabled, nextHref, previousHref, router, todayHref])
 
   return (
-    <div className="flex flex-wrap items-center gap-2" aria-busy={isPending}>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={isPending}
-        loading={isPending && pendingDateKey === previousDateKey}
-        onClick={() => goTo(previousDateKey)}
-      >
+    <div className="flex flex-wrap items-center gap-2">
+      <Link href={previousHref} prefetch className={navItemClassName}>
         <ChevronLeft size={14} />
         Previous day
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant={selectedDateKey === todayDateKey ? "brand" : "outline"}
-        disabled={isPending || selectedDateKey === todayDateKey}
-        loading={isPending && pendingDateKey === todayDateKey}
-        onClick={() => goTo(todayDateKey)}
-      >
-        Today
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={nextDisabled || isPending}
-        loading={isPending && pendingDateKey === nextDateKey}
-        onClick={() => goTo(nextDateKey)}
-      >
-        Next day
-        <ChevronRight size={14} />
-      </Button>
+      </Link>
+      {todayDisabled ? (
+        <span aria-disabled="true" className={disabledNavItemClassName}>
+          Today
+        </span>
+      ) : (
+        <Link href={todayHref} prefetch className={navItemClassName}>
+          Today
+        </Link>
+      )}
+      {nextDisabled ? (
+        <span aria-disabled="true" className={disabledNavItemClassName}>
+          Next day
+          <ChevronRight size={14} />
+        </span>
+      ) : (
+        <Link href={nextHref} prefetch className={navItemClassName}>
+          Next day
+          <ChevronRight size={14} />
+        </Link>
+      )}
     </div>
   )
 }
