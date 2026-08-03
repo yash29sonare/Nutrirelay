@@ -5,6 +5,7 @@ import {
   BarChart3,
   FileText,
   Settings,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,8 +37,18 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export function getNavSections(_isAdmin: boolean): NavSection[] {
-  return NAV_SECTIONS;
+export const ADMIN_NAV_SECTIONS: NavSection[] = [
+  ...NAV_SECTIONS,
+  {
+    title: "Admin",
+    items: [
+      { label: "Payment Queue", href: "/dashboard/queue", icon: CreditCard, description: "Review and verify pending manual UPI payments." },
+    ],
+  },
+];
+
+export function getNavSections(isAdmin: boolean): NavSection[] {
+  return isAdmin ? ADMIN_NAV_SECTIONS : NAV_SECTIONS;
 }
 
 export function getFlatNavItems(): NavItem[] {

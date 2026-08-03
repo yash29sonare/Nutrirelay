@@ -94,12 +94,20 @@ export async function checkTrainerReady(authUserId: string): Promise<TrainerRead
 export async function ensureTrainerRow(authUserId: string, displayName?: string): Promise<void> {
   const db = getDb()
 
-  // 1. Ensure the profile exists with role='trainer'
+  const { data: existingProfile } = await db
+    .from("profiles")
+    .select("role")
+    .eq("id", authUserId)
+    .maybeSingle()
+
+  const profileRole = existingProfile?.role === "admin" ? "admin" : "trainer"
+
+  // 1. Ensure the profile exists without downgrading an admin account.
   const { error: profileError } = await db
     .from("profiles")
     .upsert({
       id: authUserId,
-      role: "trainer",
+      role: profileRole,
       full_name: displayName ?? null,
     }, { onConflict: "id" })
 

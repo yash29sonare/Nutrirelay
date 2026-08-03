@@ -57,7 +57,19 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     return response
   }
 
-  // ── Rule 3: Fetch trainer row (safe query, fail-open) ──────────────
+  // ── Rule 3: Fetch profile role and trainer row (safe query, fail-open) ──────────────
+  let profileRole: string | null = null
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+    profileRole = data?.role ?? null
+  } catch {
+    // DB unavailable — fail-open, profile role stays null
+  }
+
   let trainer: { onboarding_status: string } | null = null
   try {
     const { data } = await supabase
@@ -71,9 +83,14 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   }
 
   const onboardingStatus = trainer?.onboarding_status ?? null
+  const isAdmin = profileRole === 'admin'
 
   // ── Rules 4-7: Decision matrix ─────────────────────────────────────
   if (isDashboardRoute) {
+    // Admin accounts can reach dashboard/operator surfaces even if a trainer row is missing.
+    if (isAdmin) {
+      return response
+    }
     // Rule 4: No trainers row → redirect to onboarding (recovery path)
     if (!trainer) {
       return NextResponse.redirect(new URL('/onboarding', request.url))

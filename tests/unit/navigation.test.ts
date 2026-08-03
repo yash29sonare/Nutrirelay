@@ -12,4 +12,12 @@ describe("trainer navigation", () => {
     expect(hrefs).not.toContain("/dashboard/conversations")
     expect(hrefs).not.toContain("/dashboard/voice-notes")
   })
+
+  it("adds admin-only workspace links for admin users", () => {
+    const labels = getNavSections(true).flatMap((section) => section.items.map((item) => item.label))
+    const hrefs = getNavSections(true).flatMap((section) => section.items.map((item) => item.href))
+
+    expect(labels).toContain("Payment Queue")
+    expect(hrefs).toContain("/dashboard/queue")
+  })
 })
