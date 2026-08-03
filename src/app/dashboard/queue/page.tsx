@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient } from "@/utils/supabase/server";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -8,11 +9,12 @@ import { PaymentGrid, type PaymentRow } from "./PaymentGrid";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CreditCard, IndianRupee, Clock } from "lucide-react";
 import type { Database } from "@/shared/types/supabase";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 function getDb() {
-  return createClient<Database>(
+  return createServiceClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -67,11 +69,28 @@ function daysSince(iso: string): number {
 }
 
 export default async function QueuePage() {
-  const db = getDb();
+  const supabase = await createClient();
   const {
     data: { user },
-  } = await db.auth.getUser();
-  const trainerId = user?.id ?? null;
+  } = await supabase.auth.getUser();
+
+  const authUserId = user?.id ?? null;
+
+  if (!authUserId) {
+    redirect("/login");
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", authUserId)
+    .maybeSingle();
+
+  if (profile?.role !== "admin") {
+    redirect("/dashboard");
+  }
+
+  const trainerId = authUserId;
 
   const rows = trainerId ? await fetchPendingPayments(trainerId) : [];
 
