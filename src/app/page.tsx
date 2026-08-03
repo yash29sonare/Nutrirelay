@@ -5,12 +5,7 @@ import {
   BellRing,
   CheckCircle2,
   ClipboardCheck,
-  Clock3,
-  FileText,
-  ListChecks,
   MessageSquareText,
-  Mic,
-  NotebookPen,
   RefreshCw,
   ScanLine,
   ShieldCheck,
@@ -19,6 +14,8 @@ import {
   UserRoundCheck,
 } from "lucide-react"
 import { BrandMark } from "@/components/brand/BrandMark"
+import { Aurora, BorderGlow, MagicBento, ShinyText, SplitText, SpotlightCard } from "@/components/react-bits"
+import { BILLING_PLANS, formatBillingPrice } from "@/lib/billing/plans"
 
 const workflow = [
   {
@@ -38,49 +35,6 @@ const workflow = [
     label: "Reporting",
     title: "Weekly progress is ready to discuss",
     body: "See compliance patterns, missed logs, and nutrition trends before each client conversation.",
-  },
-]
-
-const capabilities = [
-  {
-    icon: ScanLine,
-    title: "Food logs",
-    body: "Keep meals, notes, timestamps, and coach review status structured instead of scattered.",
-  },
-  {
-    icon: ClipboardCheck,
-    title: "Photo meal review",
-    body: "Review food photos and portion context before anything becomes a coach-facing action.",
-  },
-  {
-    icon: Mic,
-    title: "Voice note capture",
-    body: "Support clients who explain meals verbally, then bring the details into the same review flow.",
-  },
-  {
-    icon: BellRing,
-    title: "WhatsApp follow-ups",
-    body: "Prepare adherence nudges around skipped meals, routine timing, and stalled logging.",
-  },
-  {
-    icon: Clock3,
-    title: "Client routine timing",
-    body: "Track breakfast, lunch, dinner, workout windows, and check-in cadence by client.",
-  },
-  {
-    icon: ListChecks,
-    title: "Review queue",
-    body: "Separate what needs trainer attention from routine logs and already-reviewed updates.",
-  },
-  {
-    icon: FileText,
-    title: "Weekly reports",
-    body: "Summarize nutrition adherence, missed logs, and coach notes before client calls.",
-  },
-  {
-    icon: NotebookPen,
-    title: "Trainer notes",
-    body: "Keep corrections, rejects, merges, and follow-up context attached to the client record.",
   },
 ]
 
@@ -136,6 +90,49 @@ const coachPriorities = [
   "Review meals without scrolling through long WhatsApp threads.",
   "Send reminders that still sound like the trainer.",
   "Open weekly summaries before client check-in calls.",
+]
+
+const bentoItems = [
+  {
+    eyebrow: "WhatsApp inbox",
+    title: "Client updates stay tied to the right record",
+    body: "Meal messages, media, and follow-up context are organized for trainer review instead of disappearing in chat history.",
+    wide: true,
+  },
+  {
+    eyebrow: "AI assisted",
+    title: "Text meals become reviewable logs",
+    body: "NutriRelay can prepare nutrition notes from clear client messages while keeping trainer approval in the loop.",
+  },
+  {
+    eyebrow: "Media review",
+    title: "Photos and voice notes stay visible",
+    body: "Food photos and voice-note review items surface where the trainer can inspect them before acting.",
+  },
+  {
+    eyebrow: "Coach control",
+    title: "Trainer review queue first",
+    body: "Approve, correct, or reject nutrition logs before client-facing actions are taken.",
+  },
+  {
+    eyebrow: "Reports",
+    title: "Weekly and monthly summaries",
+    body: "Prepare client conversations with adherence, missed meal windows, and nutrition trends in one place.",
+  },
+  {
+    eyebrow: "Manual pilot",
+    title: "Trial friendly, no card required",
+    body: "Manual QR/UPI verification keeps the pilot honest without claiming automatic payment activation.",
+    wide: true,
+  },
+]
+
+const pricingCards = [
+  BILLING_PLANS.trial,
+  BILLING_PLANS.starter,
+  BILLING_PLANS.growth,
+  BILLING_PLANS.pro,
+  BILLING_PLANS.agency,
 ]
 const featureVisuals = [
   {
@@ -203,33 +200,37 @@ export default function LandingPage() {
         </header>
 
         <main className="flex-1 py-10 lg:py-14">
-          <section className="grid gap-10 xl:grid-cols-[minmax(0,0.95fr)_minmax(440px,0.8fr)] xl:items-start">
+          <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f12] p-5 sm:p-7 lg:p-9">
+            <Aurora opacity={0.34} />
+            <div className="relative z-10 grid gap-10 xl:grid-cols-[minmax(0,0.95fr)_minmax(440px,0.8fr)] xl:items-start">
             <div>
-              <p className="mb-5 inline-flex border border-white/18 px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-[#d6d9dd]">
-                Built for meal-first coaching
+              <p className="mb-5 inline-flex border border-white/18 bg-black/20 px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-[#d6d9dd]">
+                <ShinyText base="#d6d9dd" highlight="#ffffff">WhatsApp-first coaching</ShinyText>
               </p>
               <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-normal text-white sm:text-5xl lg:text-6xl xl:text-7xl">
-                Run the nutrition side of coaching from one workspace.
+                <SplitText text="Run the nutrition side of coaching from one workspace." />
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-7 text-[#b9bec5] sm:text-lg">
                 NutriRelay helps nutrition coaches review food photos, send adherence follow-ups, and prepare
                 weekly client reports. It stays focused on nutrition, not workout programming.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-                <Link
-                  href="/login"
-                  className="inline-flex w-fit items-center gap-2 rounded-md bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
-                >
-                  Open trainer dashboard
-                  <ArrowRight size={16} />
-                </Link>
+                <BorderGlow className="inline-flex rounded-md p-px">
+                  <Link
+                    href="/login"
+                    className="inline-flex w-fit items-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
+                  >
+                    Start 7-day Pro trial
+                    <ArrowRight size={16} />
+                  </Link>
+                </BorderGlow>
                 <p className="max-w-sm text-sm leading-6 text-[#8f969e]">
-                  Private access for trainers managing nutrition adherence across active clients.
+                  No card required. Manual access for trainers managing nutrition adherence across active clients.
                 </p>
               </div>
             </div>
 
-            <aside className="border border-white/12 bg-[#111111]">
+            <aside className="border border-white/12 bg-[#101418]/90">
               <div className="border-b border-white/12 p-5">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
                   Nutrition desk
@@ -247,7 +248,7 @@ export default function LandingPage() {
 
               <div className="divide-y divide-white/10">
                 {workflow.map((item) => (
-                  <article key={item.label} className="p-5">
+                  <SpotlightCard key={item.label} className="p-5" color="rgba(95, 228, 166, 0.12)">
                     <div className="flex items-start gap-4">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-white/12 bg-[#171717] text-[#9bdcff]">
                         <item.icon size={18} />
@@ -260,10 +261,11 @@ export default function LandingPage() {
                         <p className="mt-2 text-sm leading-6 text-[#aeb4bb]">{item.body}</p>
                       </div>
                     </div>
-                  </article>
+                  </SpotlightCard>
                 ))}
               </div>
             </aside>
+            </div>
           </section>
 
           <section className="mt-14 border-t border-white/12 pt-10">
@@ -323,20 +325,57 @@ export default function LandingPage() {
                   chatbots or workout programming.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {capabilities.map(({ icon: Icon, title, body }) => (
-                  <div
-                    key={title}
-                    className="border border-white/10 bg-[#101010] p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon size={16} className="text-[#9bdcff]" />
-                      <h3 className="text-sm font-semibold text-white">{title}</h3>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-[#aeb4bb]">{body}</p>
-                  </div>
-                ))}
+              <MagicBento items={bentoItems} />
+            </div>
+          </section>
+
+          <section className="mt-14 border-t border-white/12 pt-10">
+            <div className="mb-7 grid gap-4 lg:grid-cols-[0.72fr_1fr] lg:items-end">
+              <div>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                  Pricing
+                </p>
+                <h2 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight text-white">
+                  Start with a manual pilot, then choose the roster size that fits.
+                </h2>
               </div>
+              <p className="max-w-2xl text-sm leading-6 text-[#aeb4bb] lg:justify-self-end">
+                NutriRelay does not collect card details or claim automatic activation. Payment remains manual
+                QR/UPI with operator verification.
+              </p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-5">
+              {pricingCards.map((plan) => {
+                const isPro = plan.key === "pro"
+                return (
+                  <SpotlightCard
+                    key={plan.key}
+                    className={`rounded-xl border p-4 ${
+                      isPro
+                        ? "border-[#63ffb7]/55 bg-[#10201a]"
+                        : "border-white/10 bg-[#101010]"
+                    }`}
+                    color={isPro ? "rgba(95, 228, 166, 0.22)" : "rgba(155, 220, 255, 0.12)"}
+                  >
+                    <div className="relative z-10 flex min-h-full flex-col">
+                      <div className="flex min-h-16 items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{plan.name}</p>
+                          <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">{plan.headline}</p>
+                        </div>
+                        {"badgeLabel" in plan && plan.badgeLabel ? (
+                          <span className="rounded-full border border-[#63ffb7]/30 bg-[#63ffb7]/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[#a7ffd1]">
+                            <ShinyText base="#a7ffd1" highlight="#ffffff">{plan.badgeLabel}</ShinyText>
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-4 text-lg font-semibold text-white">{formatBillingPrice(plan)}</p>
+                      <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">{plan.clientLimitLabel}</p>
+                      <p className="mt-4 text-xs leading-5 text-[#8f969e]">{plan.helperText}</p>
+                    </div>
+                  </SpotlightCard>
+                )
+              })}
             </div>
           </section>
 
@@ -538,13 +577,15 @@ export default function LandingPage() {
                 </p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
-                >
-                  Open trainer dashboard
-                  <ArrowRight size={16} />
-                </Link>
+                <BorderGlow className="inline-flex rounded-md p-px">
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center justify-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
+                  >
+                    Start trial
+                    <ArrowRight size={16} />
+                  </Link>
+                </BorderGlow>
                 <Link
                   href="/privacy"
                   className="inline-flex items-center justify-center rounded-md border border-white/18 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/8"

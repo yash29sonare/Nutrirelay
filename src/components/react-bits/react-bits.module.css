@@ -1,0 +1,198 @@
+.aurora {
+  position: absolute;
+  inset: -20%;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--aurora-opacity, 0.42);
+  filter: blur(24px) saturate(1.08);
+}
+
+.aurora::before,
+.aurora::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 22% 20%, rgba(91, 255, 169, 0.24), transparent 30%),
+    radial-gradient(circle at 74% 18%, rgba(102, 205, 255, 0.2), transparent 28%),
+    radial-gradient(circle at 52% 78%, rgba(240, 210, 102, 0.12), transparent 32%);
+  transform: translate3d(0, 0, 0) rotate(0deg) scale(1.04);
+  animation: auroraDrift 22s ease-in-out infinite alternate;
+}
+
+.aurora::after {
+  background:
+    radial-gradient(circle at 80% 65%, rgba(31, 202, 112, 0.18), transparent 34%),
+    radial-gradient(circle at 30% 75%, rgba(129, 140, 248, 0.12), transparent 35%);
+  animation-duration: 30s;
+  animation-direction: alternate-reverse;
+  opacity: 0.8;
+}
+
+.splitText {
+  display: inline;
+}
+
+.splitWord {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.45em);
+  animation: splitTextRise 680ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--split-index, 0) * 55ms);
+}
+
+.shinyText {
+  display: inline-block;
+  color: transparent;
+  background-image: linear-gradient(
+    110deg,
+    var(--shine-base, #b8c3cf) 0%,
+    var(--shine-base, #b8c3cf) 38%,
+    var(--shine-highlight, #ffffff) 50%,
+    var(--shine-base, #b8c3cf) 62%,
+    var(--shine-base, #b8c3cf) 100%
+  );
+  background-size: 220% auto;
+  background-position: 140% center;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shinySweep 4.6s ease-in-out infinite;
+}
+
+.spotlightCard {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.spotlightCard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  background:
+    radial-gradient(
+      circle at var(--spotlight-x, 50%) var(--spotlight-y, 50%),
+      var(--spotlight-color, rgba(155, 220, 255, 0.18)),
+      transparent 42%
+    );
+}
+
+.spotlightCard:hover::before,
+.spotlightCard:focus-within::before {
+  opacity: 1;
+}
+
+.bentoGrid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .bentoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .bentoGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.bentoCard {
+  min-height: 12rem;
+  transform: translateY(0);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.bentoCard:hover {
+  transform: translateY(-2px);
+}
+
+.borderGlow {
+  position: relative;
+  isolation: isolate;
+}
+
+.borderGlow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(
+    115deg,
+    rgba(99, 255, 183, 0.78),
+    rgba(127, 203, 255, 0.76),
+    rgba(244, 214, 94, 0.56),
+    rgba(99, 255, 183, 0.78)
+  );
+  background-size: 220% 220%;
+  opacity: var(--border-glow-opacity, 0.72);
+  animation: borderGlowMove 7s ease-in-out infinite;
+}
+
+@keyframes auroraDrift {
+  from {
+    transform: translate3d(-2%, -1%, 0) rotate(-4deg) scale(1.02);
+  }
+  to {
+    transform: translate3d(3%, 2%, 0) rotate(5deg) scale(1.1);
+  }
+}
+
+@keyframes splitTextRise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shinySweep {
+  0%,
+  32% {
+    background-position: 140% center;
+  }
+  70%,
+  100% {
+    background-position: -60% center;
+  }
+}
+
+@keyframes borderGlowMove {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora::before,
+  .aurora::after,
+  .splitWord,
+  .shinyText,
+  .borderGlow::before {
+    animation: none;
+  }
+
+  .splitWord {
+    opacity: 1;
+    transform: none;
+  }
+
+  .bentoCard,
+  .bentoCard:hover {
+    transform: none;
+  }
+}

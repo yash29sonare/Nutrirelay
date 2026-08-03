@@ -10,6 +10,7 @@ import { SettingsProfileForm } from "./SettingsProfileForm"
 import { getManualWabaOnboardingReadiness, type ManualWabaCredentialState } from "@/lib/waba/manual-onboarding-readiness"
 import { formatDateTime } from "@/lib/format"
 import { BILLING_PLAN_ORDER, BILLING_PLANS, formatBillingPrice, getBillingPlan } from "@/lib/billing/plans"
+import { BorderGlow, ShinyText, SpotlightCard } from "@/components/react-bits"
 
 const AUTOMATION_GROUPS = [
   {
@@ -257,28 +258,43 @@ export default async function SettingsPage() {
                   plan.key === "agency" ? "Custom operator approval" : "No card collection in app",
                 ]
 
-                return (
-                  <div
+                const card = (
+                  <SpotlightCard
                     key={plan.key}
-                    className={`rounded-xl border p-4 ${
+                    className={`h-full rounded-xl border p-4 ${
                       isCurrent
                         ? "border-[var(--success)] bg-[var(--success)]/10"
-                        : "border-[var(--surface-border)] bg-[var(--surface-overlay)]/40"
+                        : plan.key === "pro"
+                          ? "border-brand-500/35 bg-brand-500/10"
+                          : "border-[var(--surface-border)] bg-[var(--surface-overlay)]/40"
                     }`}
+                    color={plan.key === "pro" ? "rgba(34, 197, 94, 0.2)" : "rgba(59, 130, 246, 0.12)"}
                   >
                     <div className="flex min-h-16 items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-semibold text-[var(--foreground)]">{plan.name}</p>
                         <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{plan.headline}</p>
                       </div>
-                      {"badgeLabel" in plan && plan.badgeLabel ? <Badge variant="brand">{plan.badgeLabel}</Badge> : null}
+                      {"badgeLabel" in plan && plan.badgeLabel ? (
+                        <Badge variant="brand">
+                          <ShinyText base="#dcfce7" highlight="#ffffff">{plan.badgeLabel}</ShinyText>
+                        </Badge>
+                      ) : null}
                     </div>
                     <p className="mt-4 text-lg font-semibold text-[var(--foreground)]">{formatBillingPrice(plan)}</p>
                     <p className="mt-1 min-h-10 text-xs leading-5 text-[var(--muted)]">{plan.helperText}</p>
                     <div className="mt-4 border-t border-[var(--surface-border)] pt-3">
                       <PlanFeatureList features={featureLabels} />
                     </div>
-                  </div>
+                  </SpotlightCard>
+                )
+
+                return isCurrent || plan.key === "pro" ? (
+                  <BorderGlow key={plan.key} className="block rounded-xl p-px" glowOpacity={isCurrent ? 0.44 : 0.34}>
+                    {card}
+                  </BorderGlow>
+                ) : (
+                  card
                 )
               })}
             </div>
