@@ -3,10 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { DashboardGrid } from "@/components/layout/DashboardGrid";
-import { DashboardSection } from "@/components/layout/DashboardSection";
 import { PaymentGrid, type PaymentRow } from "./PaymentGrid";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { CreditCard, IndianRupee, Clock } from "lucide-react";
 import type { Database } from "@/shared/types/supabase";
 import { redirect } from "next/navigation";
@@ -68,6 +65,36 @@ function daysSince(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function MetricTile({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  tone: "amber" | "brand" | "sky";
+}) {
+  const toneClasses = {
+    amber: "bg-amber-500/10 text-amber-500",
+    brand: "bg-brand-500/10 text-brand-500",
+    sky: "bg-sky-500/10 text-sky-500",
+  } satisfies Record<typeof tone, string>;
+
+  return (
+    <div className="flex min-h-24 items-center gap-4 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)]/35 px-4 py-3">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${toneClasses[tone]}`}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-2xl font-semibold leading-none text-[var(--foreground)]">{value}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{label}</p>
+      </div>
+    </div>
+  );
+}
+
 export default async function QueuePage() {
   const supabase = await createClient();
   const {
@@ -99,67 +126,60 @@ export default async function QueuePage() {
     rows.length > 0 ? daysSince(rows[0].created_at) : null;
 
   return (
-    <PageContainer>
+    <PageContainer className="space-y-6 pb-10">
       <PageHeader
         title="Payment Queue"
         description="Verify pending UPI payments from your clients."
       />
 
-      {/* Metrics */}
-      <DashboardSection title="Payment metrics">
-        <DashboardGrid columns={3}>
-        <Card>
-          <CardContent className="flex items-center gap-4 py-5">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-sky-500/10 shrink-0">
-              <CreditCard size={18} className="text-sky-500" />
-            </div>
+      <Card className="overflow-hidden">
+        <CardContent className="space-y-5 p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-2xl font-bold text-[var(--foreground)] leading-none">
-                {rows.length}
+              <h2 className="text-sm font-semibold text-[var(--foreground)]">Payment metrics</h2>
+              <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                Manual UPI proof awaiting operator review.
               </p>
-              <p className="text-xs text-[var(--muted)] mt-1">Pending payments</p>
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-xs text-[var(--muted)]">
+              Activation remains manual after payment proof is reviewed.
+            </p>
+          </div>
 
-        <Card>
-          <CardContent className="flex items-center gap-4 py-5">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-500/10 shrink-0">
-              <IndianRupee size={18} className="text-brand-500" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-[var(--foreground)] leading-none">
-                ₹{totalValue.toLocaleString("en-IN")}
-              </p>
-              <p className="text-xs text-[var(--muted)] mt-1">Total in queue</p>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="grid gap-3 md:grid-cols-3">
+            <MetricTile
+              icon={<CreditCard size={18} />}
+              label="Pending payments"
+              value={rows.length}
+              tone="sky"
+            />
+            <MetricTile
+              icon={<IndianRupee size={18} />}
+              label="Total in queue"
+              value={`₹${totalValue.toLocaleString("en-IN")}`}
+              tone="brand"
+            />
+            <MetricTile
+              icon={<Clock size={18} />}
+              label="Oldest ticket age"
+              value={oldestAge !== null ? `${oldestAge}d` : "—"}
+              tone="amber"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardContent className="flex items-center gap-4 py-5">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 shrink-0">
-              <Clock size={18} className="text-amber-500" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-[var(--foreground)] leading-none">
-                {oldestAge !== null ? `${oldestAge}d` : "—"}
-              </p>
-              <p className="text-xs text-[var(--muted)] mt-1">Oldest ticket age</p>
-            </div>
-          </CardContent>
-        </Card>
-      </DashboardGrid>
-      </DashboardSection>
-
-      {/* Payment grid */}
-      {!trainerId ? (
-        <EmptyState
-          title="Sign in to view your payment queue."
-        />
-      ) : (
+      <section className="space-y-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">Pending payment proofs</h2>
+            <p className="text-xs leading-5 text-[var(--muted)]">
+              Review submitted UTR details and receipts from active clients.
+            </p>
+          </div>
+        </div>
         <PaymentGrid initialRows={rows} />
-      )}
+      </section>
     </PageContainer>
   );
 }

@@ -52,9 +52,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         <MobileNav isAdmin={isAdmin} displayName={displayName} />
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           <DashboardHeader displayName={displayName} email={email} />
-          <main className="flex-1 overflow-y-auto" aria-label="Dashboard content">
-            {children}
-            <footer className="mt-8 border-t border-[var(--surface-border)] bg-[var(--surface-raised)]">
+          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Dashboard content">
+            <div className="flex-1">
+              {children}
+            </div>
+            <footer className="mt-auto border-t border-[var(--surface-border)] bg-[var(--surface-raised)]">
               <div className="flex flex-col gap-3 px-4 py-3 text-xs text-[var(--muted)] sm:px-6 lg:px-8 md:flex-row md:items-center md:justify-between">
                 <p>NutriRelay public information</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

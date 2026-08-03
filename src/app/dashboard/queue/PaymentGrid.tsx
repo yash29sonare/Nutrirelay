@@ -58,11 +58,14 @@ export function PaymentGrid({ initialRows }: PaymentGridProps) {
 
   if (rows.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <p className="text-sm text-[var(--muted)]">
-            No pending payments. All clear.
-          </p>
+      <Card className="border-dashed">
+        <CardContent className="flex min-h-56 items-center justify-center p-8 text-center">
+          <div>
+            <p className="text-sm font-medium text-[var(--foreground)]">No pending payments</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              New manual UPI submissions will appear here for review.
+            </p>
+          </div>
         </CardContent>
       </Card>
     );
