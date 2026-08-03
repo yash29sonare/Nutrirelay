@@ -9,6 +9,7 @@ import { SettingsAccountSection } from "./SettingsAccountSection"
 import { SettingsProfileForm } from "./SettingsProfileForm"
 import { getManualWabaOnboardingReadiness, type ManualWabaCredentialState } from "@/lib/waba/manual-onboarding-readiness"
 import { formatDateTime } from "@/lib/format"
+import { BILLING_PLAN_ORDER, BILLING_PLANS, formatBillingPrice, getBillingPlan } from "@/lib/billing/plans"
 
 const AUTOMATION_GROUPS = [
   {
@@ -112,6 +113,19 @@ const SUPPORT_LINKS = [
   },
 ] as const
 
+function PlanFeatureList({ features }: { features: readonly string[] }) {
+  return (
+    <ul className="space-y-1.5 text-xs leading-5 text-[var(--muted)]">
+      {features.map((feature) => (
+        <li key={feature} className="flex items-start gap-2">
+          <CheckCircle2 size={13} className="mt-1 shrink-0 text-[var(--success)]" />
+          <span>{feature}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -132,6 +146,11 @@ export default async function SettingsPage() {
   const businessName = (profile?.business_name as string) ?? null
   const email = user?.email ?? (profile?.email as string) ?? ""
   const subscriptionPlan = (profile?.subscription_plan as string) ?? "STARTER"
+  const currentBillingPlan = getBillingPlan(subscriptionPlan)
+  const currentBillingPlanLabel = currentBillingPlan?.name ?? "Plan not assigned"
+  const currentBillingPlanDetail = currentBillingPlan
+    ? `${currentBillingPlan.name} · ${currentBillingPlan.clientLimitLabel}`
+    : "No mapped billing plan has been assigned."
   const credential = readiness?.credential ?? null
   const isCredentialConnected = credential?.state === "connected"
   const hasCredential = Boolean(credential && credential.state !== "missing")
@@ -172,7 +191,7 @@ export default async function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-[var(--muted)]">Subscription Plan</p>
-                <p className="text-sm text-[var(--foreground)]">{subscriptionPlan}</p>
+                <p className="text-sm text-[var(--foreground)]">{currentBillingPlanLabel}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-[var(--muted)]">Account Status</p>
@@ -218,7 +237,7 @@ export default async function SettingsPage() {
                 </div>
               </div>
               <div className="space-y-3">
-                <FieldValue label="Saved plan" value={subscriptionPlan} />
+                <FieldValue label="Saved plan" value={currentBillingPlanDetail} />
                 <FieldValue label="Payment method" value="Manual QR/UPI only" />
                 <FieldValue label="Verification status" value="Operator verified manually after payment proof is reviewed" />
                 <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4 text-sm leading-6 text-[var(--muted)]">
@@ -227,6 +246,41 @@ export default async function SettingsPage() {
                   <p>Do not enter a UPI PIN in NutriRelay. Complete payment only inside the trainer&apos;s UPI app, then wait for operator verification.</p>
                 </div>
               </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+              {BILLING_PLAN_ORDER.map((planKey) => {
+                const plan = BILLING_PLANS[planKey]
+                const isCurrent = currentBillingPlan?.key === plan.key
+                const featureLabels = [
+                  plan.clientLimitLabel,
+                  plan.trialDays ? `${plan.trialDays}-day trial access` : "Monthly manual verification",
+                  plan.key === "agency" ? "Custom operator approval" : "No card collection in app",
+                ]
+
+                return (
+                  <div
+                    key={plan.key}
+                    className={`rounded-xl border p-4 ${
+                      isCurrent
+                        ? "border-[var(--success)] bg-[var(--success)]/10"
+                        : "border-[var(--surface-border)] bg-[var(--surface-overlay)]/40"
+                    }`}
+                  >
+                    <div className="flex min-h-16 items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--foreground)]">{plan.name}</p>
+                        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{plan.headline}</p>
+                      </div>
+                      {"badgeLabel" in plan && plan.badgeLabel ? <Badge variant="brand">{plan.badgeLabel}</Badge> : null}
+                    </div>
+                    <p className="mt-4 text-lg font-semibold text-[var(--foreground)]">{formatBillingPrice(plan)}</p>
+                    <p className="mt-1 min-h-10 text-xs leading-5 text-[var(--muted)]">{plan.helperText}</p>
+                    <div className="mt-4 border-t border-[var(--surface-border)] pt-3">
+                      <PlanFeatureList features={featureLabels} />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -336,7 +390,7 @@ export default async function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <ChecklistItem done label="Current plan is visible" detail={`Saved plan: ${subscriptionPlan}.`} />
+            <ChecklistItem done label="Current plan is visible" detail={`Saved plan: ${currentBillingPlanDetail}`} />
             <ChecklistItem done label="Manual pilot remains available" detail="Current manual trainer WABA pilot is not blocked by billing until payment enforcement is enabled." />
             <ChecklistItem done={false} label="Billing provider not connected" detail="No fake paid state is shown. WhatsApp connection can require an active plan when billing is enabled." />
           </CardContent>
