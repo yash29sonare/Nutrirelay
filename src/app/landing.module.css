@@ -1,0 +1,131 @@
+.landingShell {
+  --landing-bg: #f4f0e7;
+  --landing-bg-soft: #eee8dc;
+  --landing-surface: #fffaf1;
+  --landing-card: #fbf7ee;
+  --landing-card-strong: #f7efe2;
+  --landing-ink: #172118;
+  --landing-muted: #5f6d63;
+  --landing-subtle: #7d887f;
+  --landing-border: rgba(31, 43, 33, 0.13);
+  --landing-border-strong: rgba(31, 43, 33, 0.2);
+  --landing-accent: #1fbd6a;
+  --landing-accent-soft: rgba(31, 189, 106, 0.14);
+  --landing-accent-strong: #0f8d4b;
+  --landing-sky: #317fa3;
+  --landing-button: #172118;
+  --landing-button-text: #fffaf1;
+  --landing-button-hover: #243428;
+  --landing-shadow: 0 28px 80px rgba(65, 53, 36, 0.12);
+  --landing-photo-overlay: linear-gradient(180deg, rgba(15, 18, 12, 0.04), rgba(15, 18, 12, 0.72));
+  background:
+    radial-gradient(circle at 18% 12%, rgba(79, 211, 127, 0.14), transparent 30rem),
+    radial-gradient(circle at 78% 2%, rgba(244, 208, 115, 0.12), transparent 28rem),
+    linear-gradient(180deg, var(--landing-bg), var(--landing-bg-soft));
+  color: var(--landing-ink);
+}
+
+.landingShell[data-landing-theme="dark"] {
+  --landing-bg: #080808;
+  --landing-bg-soft: #0b0d0b;
+  --landing-surface: #0b0f12;
+  --landing-card: #101010;
+  --landing-card-strong: #10161a;
+  --landing-ink: #ffffff;
+  --landing-muted: #b9bec5;
+  --landing-subtle: #8f969e;
+  --landing-border: rgba(255, 255, 255, 0.12);
+  --landing-border-strong: rgba(255, 255, 255, 0.18);
+  --landing-accent: #63ffb7;
+  --landing-accent-soft: rgba(99, 255, 183, 0.12);
+  --landing-accent-strong: #a7ffd1;
+  --landing-sky: #9bdcff;
+  --landing-button: #ffffff;
+  --landing-button-text: #080808;
+  --landing-button-hover: #e6e6e6;
+  --landing-shadow: none;
+  --landing-photo-overlay: linear-gradient(180deg, rgba(8, 8, 8, 0.04), rgba(8, 8, 8, 0.72));
+  background: #080808;
+}
+
+.surface {
+  border-color: var(--landing-border);
+  background: color-mix(in srgb, var(--landing-surface) 92%, transparent);
+  box-shadow: var(--landing-shadow);
+}
+
+.card {
+  border-color: var(--landing-border);
+  background: var(--landing-card);
+}
+
+.cardStrong {
+  border-color: var(--landing-border);
+  background: var(--landing-card-strong);
+}
+
+.textPrimary {
+  color: var(--landing-ink);
+}
+
+.textMuted {
+  color: var(--landing-muted);
+}
+
+.textSubtle {
+  color: var(--landing-subtle);
+}
+
+.eyebrow {
+  color: var(--landing-subtle);
+}
+
+.accentText {
+  color: var(--landing-accent-strong);
+}
+
+.primaryButton {
+  background: var(--landing-button);
+  color: var(--landing-button-text);
+}
+
+.primaryButton:hover {
+  background: var(--landing-button-hover);
+}
+
+.secondaryButton {
+  border-color: var(--landing-border-strong);
+  color: var(--landing-ink);
+}
+
+.secondaryButton:hover {
+  background: color-mix(in srgb, var(--landing-card-strong) 82%, transparent);
+}
+
+.photoPanel {
+  background-image: var(--landing-photo-overlay), var(--photo-image);
+}
+
+.heroPhoto {
+  background-image: var(--landing-photo-overlay), var(--photo-image);
+}
+
+.inlinePhoto {
+  background-image: linear-gradient(180deg, rgba(15, 18, 12, 0.03), rgba(15, 18, 12, 0.34)), var(--photo-image);
+}
+
+.pricingPro {
+  border-color: color-mix(in srgb, var(--landing-accent) 48%, var(--landing-border));
+  background: color-mix(in srgb, var(--landing-accent-soft) 44%, var(--landing-card));
+}
+
+.themeButtonShell {
+  border: 1px solid var(--landing-border-strong);
+  background: color-mix(in srgb, var(--landing-card) 72%, transparent);
+  color: var(--landing-muted);
+}
+
+.themeButtonShell:hover {
+  color: var(--landing-ink);
+  background: var(--landing-card-strong);
+}

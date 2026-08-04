@@ -185,3 +185,52 @@ export function BorderBeam({
 }) {
   return <div className={cx(styles.borderBeam, className)}>{children}</div>;
 }
+
+export function MovingBorder({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={cx(styles.movingBorder, className)}>{children}</div>;
+}
+
+export function StickyScrollReveal({
+  items,
+  className = "",
+}: {
+  items: Array<{ title: string; body: string; image: string }>;
+  className?: string;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeItem = items[activeIndex] ?? items[0];
+
+  return (
+    <div className={cx(styles.stickyReveal, className)}>
+      <div className={styles.stickyRevealList}>
+        {items.map((item, index) => (
+          <article
+            className={cx(styles.stickyRevealItem, index === activeIndex && styles.stickyRevealItemActive)}
+            key={item.title}
+            onFocus={() => setActiveIndex(index)}
+            onPointerEnter={() => setActiveIndex(index)}
+            tabIndex={0}
+          >
+            <div className={styles.stickyRevealIndex}>{index + 1}</div>
+            <div>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className={styles.stickyRevealMedia} aria-hidden="true">
+        <div
+          className={styles.stickyRevealImage}
+          style={{ "--sticky-image": `url(${activeItem?.image ?? ""})` } as StyleVars}
+        />
+      </div>
+    </div>
+  );
+}

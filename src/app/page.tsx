@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
@@ -7,10 +8,23 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react"
+import landing from "./landing.module.css"
+import { FocusCards } from "@/components/aceternity"
 import { BrandMark } from "@/components/brand/BrandMark"
-import { AnimatedList, BlurFade, BorderBeam, Marquee, NumberTicker } from "@/components/magic-ui"
+import { LandingThemeShell, LandingThemeToggle } from "@/components/public/LandingTheme"
+import {
+  AnimatedList,
+  BlurFade,
+  BorderBeam,
+  Marquee,
+  MovingBorder,
+  NumberTicker,
+  StickyScrollReveal,
+} from "@/components/magic-ui"
 import { Aurora, BorderGlow, MagicBento, ShinyText, SplitText, SpotlightCard } from "@/components/react-bits"
 import { BILLING_PLANS, formatBillingPrice } from "@/lib/billing/plans"
+
+type LandingStyle = CSSProperties & Record<`--${string}`, string | number>
 
 const photos = {
   hero:
@@ -47,9 +61,14 @@ const howItWorks = [
     image: photos.planReview,
   },
   {
-    title: "Trainer reviews and follows up",
-    body: "The trainer stays responsible for approving notes and deciding the next client action.",
+    title: "Trainer reviews before action",
+    body: "The trainer stays responsible for approving notes before they shape client follow-up.",
     image: photos.trainerReview,
+  },
+  {
+    title: "Report is ready",
+    body: "Weekly summaries give the trainer enough context to plan the next check-in.",
+    image: photos.mealSummary,
   },
 ]
 
@@ -57,22 +76,22 @@ const workflowItems = [
   {
     label: "Meal photo received",
     detail: "Client stays on WhatsApp",
-    accent: "#63ffb7",
+    accent: "#35c979",
   },
   {
     label: "AI prepared review note",
     detail: "Structured draft, not auto-approved",
-    accent: "#9bdcff",
+    accent: "#4aa7c8",
   },
   {
     label: "Trainer checked macros",
     detail: "Coach judgment stays final",
-    accent: "#f3d36b",
+    accent: "#d7a72b",
   },
   {
     label: "Weekly summary ready",
     detail: "Progress context for follow-up",
-    accent: "#8fffc0",
+    accent: "#28b769",
   },
 ]
 
@@ -154,10 +173,8 @@ function PhotoPanel({
 }) {
   return (
     <article
-      className={`relative min-h-[22rem] overflow-hidden rounded-xl bg-cover bg-center ${className}`}
-      style={{
-        backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.08), rgba(8, 8, 8, 0.78)), url(${image})`,
-      }}
+      className={`${landing.photoPanel} relative min-h-[22rem] overflow-hidden rounded-xl bg-cover bg-center ${className}`}
+      style={{ "--photo-image": `url(${image})` } as LandingStyle}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
       <div className="relative flex h-full min-h-[22rem] flex-col justify-end p-5">
@@ -171,62 +188,65 @@ function PhotoPanel({
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#080808] text-white">
+    <LandingThemeShell className={`${landing.landingShell} min-h-screen overflow-x-hidden`}>
       <div className="mx-auto flex min-h-screen w-full max-w-[88rem] flex-col px-5 py-5 sm:px-6 lg:px-10">
-        <header className="flex items-center justify-between border-b border-white/12 pb-5">
+        <header className="flex items-center justify-between border-b pb-5" style={{ borderColor: "var(--landing-border)" }}>
           <div className="flex items-center gap-3">
             <BrandMark className="h-10 w-10 rounded-lg" />
             <div>
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#aeb4bb]">
+              <p className={`${landing.eyebrow} text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
                 Nutrition operations
               </p>
-              <p className="text-base font-semibold text-white">NutriRelay</p>
+              <p className={`${landing.textPrimary} text-base font-semibold`}>NutriRelay</p>
             </div>
           </div>
-          <Link
-            href="/login"
-            className="inline-flex items-center justify-center rounded-md border border-white/18 bg-white px-4 py-2 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
-          >
-            Sign in
-          </Link>
+          <div className="flex items-center gap-2">
+            <LandingThemeToggle
+              className={`${landing.themeButtonShell} inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
+            />
+            <Link
+              href="/login"
+              className={`${landing.primaryButton} inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
+            >
+              Sign in
+            </Link>
+          </div>
         </header>
 
         <main className="flex-1 py-10 lg:py-14">
           <BlurFade>
-            <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f12] p-5 sm:p-7 lg:p-9">
-              <Aurora opacity={0.28} />
+            <section className={`${landing.surface} relative overflow-hidden rounded-2xl border p-5 sm:p-7 lg:p-9`}>
+              <Aurora opacity={0.22} />
               <div className="relative z-10 grid gap-9 xl:grid-cols-[minmax(0,0.9fr)_minmax(430px,0.82fr)] xl:items-center">
                 <div>
-                  <p className="mb-5 inline-flex border border-white/18 bg-black/20 px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-[#d6d9dd]">
-                    <ShinyText base="#d6d9dd" highlight="#ffffff">WhatsApp-first coaching</ShinyText>
+                  <p className={`${landing.card} ${landing.textMuted} mb-5 inline-flex border px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.15em]`}>
+                    <ShinyText base="var(--landing-muted)" highlight="var(--landing-ink)">WhatsApp-first coaching</ShinyText>
                   </p>
-                  <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-normal text-white sm:text-5xl lg:text-6xl xl:text-7xl">
+                  <h1 className={`${landing.textPrimary} max-w-4xl text-4xl font-semibold leading-[1.08] tracking-normal sm:text-5xl lg:text-6xl xl:text-7xl`}>
                     <SplitText text="Nutrition reviews without the WhatsApp clutter." />
                   </h1>
-                  <p className="mt-6 max-w-xl text-base leading-7 text-[#b9bec5] sm:text-lg">
+                  <p className={`${landing.textMuted} mt-6 max-w-xl text-base leading-7 sm:text-lg`}>
                     Review meal photos, adherence gaps, and weekly client summaries from one trainer workspace.
                   </p>
                   <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px">
+                    <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px" glowOpacity={0.48}>
                       <Link
                         href="/login"
-                        className="inline-flex w-fit items-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
+                        className={`${landing.primaryButton} inline-flex w-fit items-center gap-2 rounded-[calc(0.375rem-1px)] px-5 py-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
                       >
                         Start <NumberTicker value={7} />-day Pro trial
                         <ArrowRight size={16} />
                       </Link>
                     </BorderGlow>
-                    <p className="max-w-xs text-sm leading-6 text-[#8f969e]">
+                    <p className={`${landing.textSubtle} max-w-xs text-sm leading-6`}>
                       No card required. Manual trainer access.
                     </p>
                   </div>
                 </div>
 
                 <aside
-                  className="relative min-h-[30rem] overflow-hidden rounded-xl bg-cover bg-center"
-                  style={{
-                    backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.04), rgba(8, 8, 8, 0.66)), url(${photos.hero})`,
-                  }}
+                  className={`${landing.heroPhoto} relative min-h-[30rem] overflow-hidden rounded-xl bg-cover bg-center`}
+                  style={{ "--photo-image": `url(${photos.hero})` } as LandingStyle}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                   <div className="absolute left-5 top-5 rounded-lg border border-white/14 bg-black/45 px-4 py-3 backdrop-blur">
@@ -249,13 +269,13 @@ export default function LandingPage() {
 
           <section className="mt-10">
             <BlurFade delay={80}>
-              <p className="mb-4 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+              <p className={`${landing.eyebrow} mb-4 text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
                 Built around real trainer workflows
               </p>
               <Marquee duration={42}>
                 {workflowPainPoints.map((point) => (
                   <div
-                    className="w-[19rem] rounded-lg border border-white/10 bg-[#101010] px-4 py-3 text-sm leading-6 text-[#d8dce0]"
+                    className={`${landing.card} ${landing.textMuted} w-[19rem] rounded-lg border px-4 py-3 text-sm leading-6`}
                     key={point}
                   >
                     {point}
@@ -265,58 +285,40 @@ export default function LandingPage() {
             </BlurFade>
           </section>
 
-          <section className="mt-14 grid gap-5 lg:grid-cols-3">
-            {photoStories.map((story, index) => (
-              <BlurFade delay={index * 80} key={story.title}>
-                <PhotoPanel {...story} />
-              </BlurFade>
-            ))}
+          <section className="mt-14">
+            <FocusCards>
+              {photoStories.map((story, index) => (
+                <BlurFade delay={index * 80} key={story.title}>
+                  <PhotoPanel {...story} />
+                </BlurFade>
+              ))}
+            </FocusCards>
           </section>
 
-          <section className="mt-14 border-t border-white/12 pt-10">
+          <section className="mt-14 border-t pt-10" style={{ borderColor: "var(--landing-border)" }}>
             <BlurFade>
               <div className="grid gap-8 lg:grid-cols-[0.7fr_1fr] lg:items-start">
                 <div>
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                  <p className={`${landing.eyebrow} text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
                     How it works
                   </p>
-                  <h2 className="mt-2 max-w-md text-3xl font-semibold leading-tight text-white">
+                  <h2 className={`${landing.textPrimary} mt-2 max-w-md text-3xl font-semibold leading-tight`}>
                     A shorter path from client update to coach action.
                   </h2>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {howItWorks.map((step, index) => (
-                    <BlurFade delay={index * 90} key={step.title}>
-                      <article className="h-full overflow-hidden rounded-xl bg-[#101010]">
-                        <div
-                          className="min-h-[12rem] bg-cover bg-center"
-                          style={{
-                            backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.38)), url(${step.image})`,
-                          }}
-                        />
-                        <div className="p-4">
-                          <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-md bg-[#171717] text-sm font-semibold text-[#9bdcff]">
-                            {index + 1}
-                          </div>
-                          <h3 className="text-base font-semibold leading-6 text-white">{step.title}</h3>
-                          <p className="mt-2 text-sm leading-6 text-[#aeb4bb]">{step.body}</p>
-                        </div>
-                      </article>
-                    </BlurFade>
-                  ))}
-                </div>
+                <StickyScrollReveal items={howItWorks} />
               </div>
             </BlurFade>
           </section>
 
-          <section className="mt-14 border-t border-white/12 pt-10">
+          <section className="mt-14 border-t pt-10" style={{ borderColor: "var(--landing-border)" }}>
             <BlurFade>
               <div className="grid gap-6 lg:grid-cols-[0.65fr_1fr] lg:items-start">
                 <div>
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                  <p className={`${landing.eyebrow} text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
                     Coach workspace
                   </p>
-                  <h2 className="mt-2 max-w-md text-3xl font-semibold leading-tight text-white">
+                  <h2 className={`${landing.textPrimary} mt-2 max-w-md text-3xl font-semibold leading-tight`}>
                     Built around the daily nutrition jobs trainers repeat.
                   </h2>
                 </div>
@@ -325,7 +327,7 @@ export default function LandingPage() {
             </BlurFade>
           </section>
 
-          <section className="mt-14 grid gap-6 border-t border-white/12 pt-10 lg:grid-cols-[0.8fr_1.2fr]">
+          <section className="mt-14 grid gap-6 border-t pt-10 lg:grid-cols-[0.8fr_1.2fr]" style={{ borderColor: "var(--landing-border)" }}>
             <BlurFade>
               <PhotoPanel
                 image={photos.workspace}
@@ -336,44 +338,44 @@ export default function LandingPage() {
               />
             </BlurFade>
             <BlurFade delay={100}>
-              <div className="grid content-center gap-4 rounded-xl border border-white/10 bg-[#101010] p-6 sm:p-8">
-                <div
-                  className="min-h-[13rem] overflow-hidden rounded-lg bg-cover bg-center"
-                  style={{
-                    backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.trainerControl})`,
-                  }}
-                />
-                <div className="flex items-center gap-3">
-                  <Sparkles size={18} className="text-[#9bdcff]" />
-                  <h2 className="text-2xl font-semibold text-white">Trainer stays in control.</h2>
+              <MovingBorder className="h-full rounded-xl">
+                <div className={`${landing.card} grid h-full content-center gap-4 rounded-xl border p-6 sm:p-8`}>
+                  <div
+                    className={`${landing.inlinePhoto} min-h-[13rem] overflow-hidden rounded-lg bg-cover bg-center`}
+                    style={{ "--photo-image": `url(${photos.trainerControl})` } as LandingStyle}
+                  />
+                  <div className="flex items-center gap-3">
+                    <Sparkles size={18} className={landing.accentText} />
+                    <h2 className={`${landing.textPrimary} text-2xl font-semibold`}>Trainer stays in control.</h2>
+                  </div>
+                  <p className={`${landing.textMuted} max-w-2xl text-sm leading-7`}>
+                    AI can prepare notes and group updates, but trainers still review nutrition decisions before action.
+                  </p>
+                  <div className={`${landing.textPrimary} grid gap-2 text-sm sm:grid-cols-3`}>
+                    {["Review first", "Correct logs", "Trace decisions"].map((item) => (
+                      <div key={item} className="flex items-center gap-2">
+                        <CheckCircle2 size={15} className={landing.accentText} />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <p className="max-w-2xl text-sm leading-7 text-[#b9bec5]">
-                  AI can prepare notes and group updates, but trainers still review nutrition decisions before action.
-                </p>
-                <div className="grid gap-2 text-sm text-[#d8dce0] sm:grid-cols-3">
-                  {["Review first", "Correct logs", "Trace decisions"].map((item) => (
-                    <div key={item} className="flex items-center gap-2">
-                      <CheckCircle2 size={15} className="text-[#9bdcff]" />
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </MovingBorder>
             </BlurFade>
           </section>
 
-          <section className="mt-14 border-t border-white/12 pt-10">
+          <section className="mt-14 border-t pt-10" style={{ borderColor: "var(--landing-border)" }}>
             <BlurFade>
               <div className="mb-7 grid gap-4 lg:grid-cols-[0.72fr_1fr] lg:items-end">
                 <div>
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                  <p className={`${landing.eyebrow} text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
                     Pricing
                   </p>
-                  <h2 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight text-white">
+                  <h2 className={`${landing.textPrimary} mt-2 max-w-2xl text-3xl font-semibold leading-tight`}>
                     Start with a manual pilot, then choose the roster size that fits.
                   </h2>
                 </div>
-                <p className="max-w-2xl text-sm leading-6 text-[#aeb4bb] lg:justify-self-end">
+                <p className={`${landing.textMuted} max-w-2xl text-sm leading-6 lg:justify-self-end`}>
                   No fake automatic activation. Payment remains manual QR/UPI with operator verification.
                 </p>
               </div>
@@ -382,24 +384,22 @@ export default function LandingPage() {
                   const isPro = plan.key === "pro"
                   const card = (
                     <SpotlightCard
-                      className={`h-full rounded-xl border p-4 ${
-                        isPro ? "border-[#63ffb7]/55 bg-[#10201a]" : "border-white/10 bg-[#101010]"
-                      }`}
-                      color={isPro ? "rgba(95, 228, 166, 0.22)" : "rgba(155, 220, 255, 0.12)"}
+                      className={`${isPro ? landing.pricingPro : landing.card} h-full rounded-xl border p-4`}
+                      color={isPro ? "rgba(95, 228, 166, 0.18)" : "rgba(49, 127, 163, 0.12)"}
                     >
                       <div className="relative z-10 flex min-h-full flex-col">
                         <div className="flex min-h-16 items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-semibold text-white">{plan.name}</p>
-                            <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">{plan.headline}</p>
+                            <p className={`${landing.textPrimary} text-sm font-semibold`}>{plan.name}</p>
+                            <p className={`${landing.textMuted} mt-1 text-xs leading-5`}>{plan.headline}</p>
                           </div>
                           {"badgeLabel" in plan && plan.badgeLabel ? (
-                            <span className="rounded-full border border-[#63ffb7]/30 bg-[#63ffb7]/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[#a7ffd1]">
-                              <ShinyText base="#a7ffd1" highlight="#ffffff">{plan.badgeLabel}</ShinyText>
+                            <span className="rounded-full border border-[var(--landing-accent)]/30 bg-[var(--landing-accent-soft)] px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--landing-accent-strong)]">
+                              <ShinyText base="var(--landing-accent-strong)" highlight="var(--landing-ink)">{plan.badgeLabel}</ShinyText>
                             </span>
                           ) : null}
                         </div>
-                        <p className="mt-4 text-lg font-semibold text-white">
+                        <p className={`${landing.textPrimary} mt-4 text-lg font-semibold`}>
                           {plan.key === "pro" && plan.priceInr ? (
                             <>
                               ₹<NumberTicker value={plan.priceInr} /> {plan.intervalLabel}
@@ -408,7 +408,7 @@ export default function LandingPage() {
                             formatBillingPrice(plan)
                           )}
                         </p>
-                        <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">
+                        <p className={`${landing.textMuted} mt-1 text-xs leading-5`}>
                           {plan.trialDays ? (
                             <>
                               <NumberTicker value={plan.trialDays} /> days · <NumberTicker value={plan.clientLimit} /> active clients
@@ -421,7 +421,7 @@ export default function LandingPage() {
                             plan.clientLimitLabel
                           )}
                         </p>
-                        <p className="mt-4 text-xs leading-5 text-[#8f969e]">{plan.helperText}</p>
+                        <p className={`${landing.textSubtle} mt-4 text-xs leading-5`}>{plan.helperText}</p>
                       </div>
                     </SpotlightCard>
                   )
@@ -436,19 +436,19 @@ export default function LandingPage() {
             </BlurFade>
           </section>
 
-          <section className="mt-14 grid gap-6 border-t border-white/12 pt-10 lg:grid-cols-2">
+          <section className="mt-14 grid gap-6 border-t pt-10 lg:grid-cols-2" style={{ borderColor: "var(--landing-border)" }}>
             <BlurFade>
               <div>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                <p className={`${landing.eyebrow} text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
                   Trust and safety
                 </p>
-                <h2 className="mt-2 text-3xl font-semibold leading-tight text-white">
+                <h2 className={`${landing.textPrimary} mt-2 text-3xl font-semibold leading-tight`}>
                   Nutrition operations software, not medical advice.
                 </h2>
               </div>
             </BlurFade>
             <BlurFade delay={100}>
-              <div className="space-y-3 text-sm leading-6 text-[#b9bec5]">
+              <div className={`${landing.textMuted} space-y-3 text-sm leading-6`}>
                 <p>
                   Trainers remain responsible for consent, coaching judgment, and how AI-assisted notes are used.
                 </p>
@@ -461,46 +461,48 @@ export default function LandingPage() {
           </section>
 
           <BlurFade>
-            <section className="mt-14 overflow-hidden rounded-xl border border-white/12 bg-[#101010]">
-              <div className="grid gap-0 lg:grid-cols-[1fr_0.78fr]">
-                <div className="p-6 sm:p-8">
-                  <h2 className="text-3xl font-semibold leading-tight text-white">
-                    Keep nutrition review visual, fast, and trainer-led.
-                  </h2>
-                  <p className="mt-4 max-w-2xl text-sm leading-6 text-[#aeb4bb]">
-                    Meal photos, macro checks, follow-ups, and reports stay in one place.
-                  </p>
-                  <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                    <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px">
-                      <Link
-                        href="/login"
-                        className="inline-flex items-center justify-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
-                      >
-                        Start trial
-                        <ArrowRight size={16} />
-                      </Link>
-                    </BorderGlow>
-                    <Link
-                      href="/privacy"
-                      className="inline-flex items-center justify-center rounded-md border border-white/18 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/8"
-                    >
-                      Read privacy policy
-                    </Link>
+            <section className="mt-14">
+              <BorderBeam className="rounded-xl">
+                <div className={`${landing.card} overflow-hidden rounded-xl border`}>
+                  <div className="grid gap-0 lg:grid-cols-[1fr_0.78fr]">
+                    <div className="p-6 sm:p-8">
+                      <h2 className={`${landing.textPrimary} text-3xl font-semibold leading-tight`}>
+                        Keep nutrition review visual, fast, and trainer-led.
+                      </h2>
+                      <p className={`${landing.textMuted} mt-4 max-w-2xl text-sm leading-6`}>
+                        Meal photos, macro checks, follow-ups, and reports stay in one place.
+                      </p>
+                      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                        <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px" glowOpacity={0.42}>
+                          <Link
+                            href="/login"
+                            className={`${landing.primaryButton} inline-flex items-center justify-center gap-2 rounded-[calc(0.375rem-1px)] px-5 py-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
+                          >
+                            Start trial
+                            <ArrowRight size={16} />
+                          </Link>
+                        </BorderGlow>
+                        <Link
+                          href="/privacy"
+                          className={`${landing.secondaryButton} inline-flex items-center justify-center rounded-md border px-5 py-3 text-sm font-semibold transition-colors`}
+                        >
+                          Read privacy policy
+                        </Link>
+                      </div>
+                    </div>
+                    <div
+                      className={`${landing.inlinePhoto} min-h-[18rem] bg-cover bg-center`}
+                      style={{ "--photo-image": `url(${photos.mealSummary})` } as LandingStyle}
+                    />
                   </div>
                 </div>
-                <div
-                  className="min-h-[18rem] bg-cover bg-center"
-                  style={{
-                    backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.mealSummary})`,
-                  }}
-                />
-              </div>
+              </BorderBeam>
             </section>
           </BlurFade>
         </main>
 
-        <footer className="border-t border-white/12 py-5">
-          <div className="flex flex-col gap-3 text-xs text-[#858b92] md:flex-row md:items-center md:justify-between">
+        <footer className="border-t py-5" style={{ borderColor: "var(--landing-border)" }}>
+          <div className={`${landing.textSubtle} flex flex-col gap-3 text-xs md:flex-row md:items-center md:justify-between`}>
             <p>NutriRelay</p>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <ShieldCheck size={14} />
@@ -509,22 +511,22 @@ export default function LandingPage() {
               <span>WhatsApp-ready workflows</span>
               <ClipboardCheck size={14} />
               <span>Meal review first</span>
-              <Link href="/privacy" className="underline underline-offset-2 hover:text-white">
+              <Link href="/privacy" className="underline underline-offset-2 hover:text-[var(--landing-ink)]">
                 Privacy
               </Link>
-              <Link href="/terms" className="underline underline-offset-2 hover:text-white">
+              <Link href="/terms" className="underline underline-offset-2 hover:text-[var(--landing-ink)]">
                 Terms
               </Link>
-              <Link href="/data-deletion" className="underline underline-offset-2 hover:text-white">
+              <Link href="/data-deletion" className="underline underline-offset-2 hover:text-[var(--landing-ink)]">
                 Data deletion
               </Link>
-              <Link href="/contact" className="underline underline-offset-2 hover:text-white">
+              <Link href="/contact" className="underline underline-offset-2 hover:text-[var(--landing-ink)]">
                 Contact
               </Link>
             </div>
           </div>
         </footer>
       </div>
-    </div>
+    </LandingThemeShell>
   )
 }

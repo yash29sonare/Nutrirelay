@@ -119,7 +119,7 @@ export function MagicBento({
     <div className={`${styles.bentoGrid} ${className}`}>
       {items.map((item) => (
         <SpotlightCard
-          className={`${styles.bentoCard} rounded-xl border border-white/10 bg-[#10161a] p-5 ${
+          className={`${styles.bentoCard} rounded-xl border border-[var(--landing-border)] bg-[var(--landing-card-strong)] p-5 ${
             item.wide ? "lg:col-span-2" : ""
           }`}
           color="rgba(95, 228, 166, 0.16)"
@@ -127,12 +127,12 @@ export function MagicBento({
         >
           <div className="relative z-10 flex h-full flex-col justify-between gap-6">
             <div>
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#91cdbb]">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[var(--landing-accent-strong)]">
                 {item.eyebrow}
               </p>
-              <h3 className="mt-3 text-base font-semibold leading-6 text-white">{item.title}</h3>
+              <h3 className="mt-3 text-base font-semibold leading-6 text-[var(--landing-ink)]">{item.title}</h3>
             </div>
-            <p className="text-sm leading-6 text-[#aeb8c3]">{item.body}</p>
+            <p className="text-sm leading-6 text-[var(--landing-muted)]">{item.body}</p>
           </div>
         </SpotlightCard>
       ))}

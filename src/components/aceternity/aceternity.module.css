@@ -1,0 +1,39 @@
+.focusCards {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.focusCards > * {
+  min-width: 0;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    filter 220ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .focusCards:has(> *:hover) > * {
+    opacity: 0.72;
+    filter: saturate(0.86);
+  }
+
+  .focusCards > *:hover {
+    opacity: 1;
+    filter: saturate(1.04);
+    transform: translateY(-3px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .focusCards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focusCards > *,
+  .focusCards > *:hover {
+    transform: none;
+    transition: none;
+  }
+}
