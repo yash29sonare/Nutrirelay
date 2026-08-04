@@ -19,17 +19,37 @@ const photos = {
   mealPrep:
     "https://images.unsplash.com/photo-1543353071-c953d88f7033?auto=format&fit=crop&w=1200&q=80",
   coachDesk:
-    "https://images.unsplash.com/photo-1725563304176-836f79e7e464?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1539136952455-b829f716233d?auto=format&fit=crop&w=1200&q=80",
   workspace:
     "https://images.unsplash.com/photo-1758875570137-8691b7c55033?auto=format&fit=crop&w=1200&q=80",
   trainerControl:
     "https://images.unsplash.com/photo-1758875569414-120ebc62ada3?auto=format&fit=crop&w=1200&q=80",
+  trainerReview:
+    "https://images.unsplash.com/photo-1758875568756-37a9c5c1a4f2?auto=format&fit=crop&w=1200&q=80",
+  mealCapture:
+    "https://images.unsplash.com/photo-1548809685-e3831a2aaa5f?auto=format&fit=crop&w=1200&q=80",
+  planReview:
+    "https://images.unsplash.com/photo-1754548930515-ac7eb978280d?auto=format&fit=crop&w=1200&q=80",
+  mealSummary:
+    "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=1200&q=80",
 }
 
 const howItWorks = [
-  "Client sends a meal update on WhatsApp.",
-  "NutriRelay groups the photo, note, and macro context.",
-  "Trainer reviews, corrects, and follows up from one workspace.",
+  {
+    title: "Client sends the meal",
+    body: "The update starts as a real food photo or message from the client.",
+    image: photos.mealCapture,
+  },
+  {
+    title: "NutriRelay organizes context",
+    body: "Meal notes, timing, macros, and review status are grouped into a coach-ready flow.",
+    image: photos.planReview,
+  },
+  {
+    title: "Trainer reviews and follows up",
+    body: "The trainer stays responsible for approving notes and deciding the next client action.",
+    image: photos.trainerReview,
+  },
 ]
 
 const bentoItems = [
@@ -101,7 +121,7 @@ function PhotoPanel({
 }) {
   return (
     <article
-      className={`relative min-h-[22rem] overflow-hidden rounded-xl border border-white/12 bg-cover bg-center ${className}`}
+      className={`relative min-h-[22rem] overflow-hidden rounded-xl bg-cover bg-center ${className}`}
       style={{
         backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.08), rgba(8, 8, 8, 0.78)), url(${image})`,
       }}
@@ -167,7 +187,7 @@ export default function LandingPage() {
               </div>
 
               <aside
-                className="relative min-h-[28rem] overflow-hidden rounded-xl border border-white/12 bg-cover bg-center"
+                className="relative min-h-[28rem] overflow-hidden rounded-xl bg-cover bg-center"
                 style={{
                   backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.04), rgba(8, 8, 8, 0.66)), url(${photos.hero})`,
                 }}
@@ -205,14 +225,23 @@ export default function LandingPage() {
                   A shorter path from client update to coach action.
                 </h2>
               </div>
-              <div className="grid gap-3">
+              <div className="grid gap-4 sm:grid-cols-3">
                 {howItWorks.map((step, index) => (
-                  <div key={step} className="flex gap-4 rounded-lg border border-white/10 bg-[#101010] p-4">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/12 bg-[#171717] text-sm font-semibold text-[#9bdcff]">
-                      {index + 1}
+                  <article key={step.title} className="overflow-hidden rounded-xl bg-[#101010]">
+                    <div
+                      className="min-h-[12rem] bg-cover bg-center"
+                      style={{
+                        backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.38)), url(${step.image})`,
+                      }}
+                    />
+                    <div className="p-4">
+                      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-md bg-[#171717] text-sm font-semibold text-[#9bdcff]">
+                        {index + 1}
+                      </div>
+                      <h3 className="text-base font-semibold leading-6 text-white">{step.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-[#aeb4bb]">{step.body}</p>
                     </div>
-                    <p className="text-sm leading-6 text-[#d8dce0]">{step}</p>
-                  </div>
+                  </article>
                 ))}
               </div>
             </div>
@@ -242,7 +271,7 @@ export default function LandingPage() {
             />
             <div className="grid content-center gap-4 rounded-xl border border-white/10 bg-[#101010] p-6 sm:p-8">
               <div
-                className="min-h-[13rem] rounded-lg bg-cover bg-center"
+                className="min-h-[13rem] overflow-hidden rounded-lg bg-cover bg-center"
                 style={{
                   backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.trainerControl})`,
                 }}
@@ -362,7 +391,7 @@ export default function LandingPage() {
               <div
                 className="min-h-[18rem] bg-cover bg-center"
                 style={{
-                  backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.mealPrep})`,
+                  backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.mealSummary})`,
                 }}
               />
             </div>
