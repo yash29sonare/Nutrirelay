@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { BrandMark } from "@/components/brand/BrandMark"
+import { AnimatedList, BlurFade, BorderBeam, Marquee, NumberTicker } from "@/components/magic-ui"
 import { Aurora, BorderGlow, MagicBento, ShinyText, SplitText, SpotlightCard } from "@/components/react-bits"
 import { BILLING_PLANS, formatBillingPrice } from "@/lib/billing/plans"
 
@@ -50,6 +51,38 @@ const howItWorks = [
     body: "The trainer stays responsible for approving notes and deciding the next client action.",
     image: photos.trainerReview,
   },
+]
+
+const workflowItems = [
+  {
+    label: "Meal photo received",
+    detail: "Client stays on WhatsApp",
+    accent: "#63ffb7",
+  },
+  {
+    label: "AI prepared review note",
+    detail: "Structured draft, not auto-approved",
+    accent: "#9bdcff",
+  },
+  {
+    label: "Trainer checked macros",
+    detail: "Coach judgment stays final",
+    accent: "#f3d36b",
+  },
+  {
+    label: "Weekly summary ready",
+    detail: "Progress context for follow-up",
+    accent: "#8fffc0",
+  },
+]
+
+const workflowPainPoints = [
+  "Client meal photos should not get buried in WhatsApp.",
+  "Weekly reports should not take an entire evening.",
+  "Trainers need one review queue, not scattered chats.",
+  "Clients stay on WhatsApp. Trainers get the workspace.",
+  "AI prepares notes. Trainers make the final call.",
+  "Missed follow-ups should be visible before clients drift.",
 ]
 
 const bentoItems = [
@@ -159,243 +192,311 @@ export default function LandingPage() {
         </header>
 
         <main className="flex-1 py-10 lg:py-14">
-          <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f12] p-5 sm:p-7 lg:p-9">
-            <Aurora opacity={0.28} />
-            <div className="relative z-10 grid gap-9 xl:grid-cols-[minmax(0,0.9fr)_minmax(430px,0.82fr)] xl:items-center">
-              <div>
-                <p className="mb-5 inline-flex border border-white/18 bg-black/20 px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-[#d6d9dd]">
-                  <ShinyText base="#d6d9dd" highlight="#ffffff">WhatsApp-first coaching</ShinyText>
-                </p>
-                <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-normal text-white sm:text-5xl lg:text-6xl xl:text-7xl">
-                  <SplitText text="Nutrition reviews without the WhatsApp clutter." />
-                </h1>
-                <p className="mt-6 max-w-xl text-base leading-7 text-[#b9bec5] sm:text-lg">
-                  Review meal photos, adherence gaps, and weekly client summaries from one trainer workspace.
-                </p>
-                <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px">
-                    <Link
-                      href="/login"
-                      className="inline-flex w-fit items-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
-                    >
-                      Start 7-day Pro trial
-                      <ArrowRight size={16} />
-                    </Link>
-                  </BorderGlow>
-                  <p className="max-w-xs text-sm leading-6 text-[#8f969e]">No card required. Manual trainer access.</p>
+          <BlurFade>
+            <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f12] p-5 sm:p-7 lg:p-9">
+              <Aurora opacity={0.28} />
+              <div className="relative z-10 grid gap-9 xl:grid-cols-[minmax(0,0.9fr)_minmax(430px,0.82fr)] xl:items-center">
+                <div>
+                  <p className="mb-5 inline-flex border border-white/18 bg-black/20 px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.15em] text-[#d6d9dd]">
+                    <ShinyText base="#d6d9dd" highlight="#ffffff">WhatsApp-first coaching</ShinyText>
+                  </p>
+                  <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-normal text-white sm:text-5xl lg:text-6xl xl:text-7xl">
+                    <SplitText text="Nutrition reviews without the WhatsApp clutter." />
+                  </h1>
+                  <p className="mt-6 max-w-xl text-base leading-7 text-[#b9bec5] sm:text-lg">
+                    Review meal photos, adherence gaps, and weekly client summaries from one trainer workspace.
+                  </p>
+                  <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px">
+                      <Link
+                        href="/login"
+                        className="inline-flex w-fit items-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
+                      >
+                        Start <NumberTicker value={7} />-day Pro trial
+                        <ArrowRight size={16} />
+                      </Link>
+                    </BorderGlow>
+                    <p className="max-w-xs text-sm leading-6 text-[#8f969e]">
+                      No card required. Manual trainer access.
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <aside
-                className="relative min-h-[28rem] overflow-hidden rounded-xl bg-cover bg-center"
-                style={{
-                  backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.04), rgba(8, 8, 8, 0.66)), url(${photos.hero})`,
-                }}
-              >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-                <div className="absolute left-5 top-5 rounded-lg border border-white/14 bg-black/45 px-4 py-3 backdrop-blur">
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-white/65">Today</p>
-                  <p className="mt-1 text-lg font-semibold text-white">Meal review ready</p>
-                </div>
-                <div className="absolute bottom-5 left-5 right-5 grid gap-3 sm:grid-cols-3">
-                  {["Photos", "Macros", "Follow-ups"].map((item) => (
-                    <div key={item} className="rounded-lg border border-white/14 bg-black/45 p-3 backdrop-blur">
-                      <p className="text-xs font-semibold text-white">{item}</p>
-                      <p className="mt-1 text-[0.72rem] text-white/65">Trainer checked</p>
-                    </div>
-                  ))}
-                </div>
-              </aside>
-            </div>
+                <aside
+                  className="relative min-h-[30rem] overflow-hidden rounded-xl bg-cover bg-center"
+                  style={{
+                    backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.04), rgba(8, 8, 8, 0.66)), url(${photos.hero})`,
+                  }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                  <div className="absolute left-5 top-5 rounded-lg border border-white/14 bg-black/45 px-4 py-3 backdrop-blur">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-white/65">Today</p>
+                    <p className="mt-1 text-lg font-semibold text-white">Meal review ready</p>
+                  </div>
+                  <AnimatedList className="absolute left-5 right-5 top-28 sm:left-auto sm:w-[20rem]" items={workflowItems} />
+                  <div className="absolute bottom-5 left-5 right-5 grid gap-3 sm:grid-cols-3">
+                    {["Photos", "Macros", "Follow-ups"].map((item) => (
+                      <div key={item} className="rounded-lg border border-white/14 bg-black/45 p-3 backdrop-blur">
+                        <p className="text-xs font-semibold text-white">{item}</p>
+                        <p className="mt-1 text-[0.72rem] text-white/65">Trainer checked</p>
+                      </div>
+                    ))}
+                  </div>
+                </aside>
+              </div>
+            </section>
+          </BlurFade>
+
+          <section className="mt-10">
+            <BlurFade delay={80}>
+              <p className="mb-4 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                Built around real trainer workflows
+              </p>
+              <Marquee duration={42}>
+                {workflowPainPoints.map((point) => (
+                  <div
+                    className="w-[19rem] rounded-lg border border-white/10 bg-[#101010] px-4 py-3 text-sm leading-6 text-[#d8dce0]"
+                    key={point}
+                  >
+                    {point}
+                  </div>
+                ))}
+              </Marquee>
+            </BlurFade>
           </section>
 
           <section className="mt-14 grid gap-5 lg:grid-cols-3">
-            {photoStories.map((story) => (
-              <PhotoPanel key={story.title} {...story} />
+            {photoStories.map((story, index) => (
+              <BlurFade delay={index * 80} key={story.title}>
+                <PhotoPanel {...story} />
+              </BlurFade>
             ))}
           </section>
 
           <section className="mt-14 border-t border-white/12 pt-10">
-            <div className="grid gap-8 lg:grid-cols-[0.7fr_1fr] lg:items-start">
-              <div>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
-                  How it works
-                </p>
-                <h2 className="mt-2 max-w-md text-3xl font-semibold leading-tight text-white">
-                  A shorter path from client update to coach action.
-                </h2>
+            <BlurFade>
+              <div className="grid gap-8 lg:grid-cols-[0.7fr_1fr] lg:items-start">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                    How it works
+                  </p>
+                  <h2 className="mt-2 max-w-md text-3xl font-semibold leading-tight text-white">
+                    A shorter path from client update to coach action.
+                  </h2>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {howItWorks.map((step, index) => (
+                    <BlurFade delay={index * 90} key={step.title}>
+                      <article className="h-full overflow-hidden rounded-xl bg-[#101010]">
+                        <div
+                          className="min-h-[12rem] bg-cover bg-center"
+                          style={{
+                            backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.38)), url(${step.image})`,
+                          }}
+                        />
+                        <div className="p-4">
+                          <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-md bg-[#171717] text-sm font-semibold text-[#9bdcff]">
+                            {index + 1}
+                          </div>
+                          <h3 className="text-base font-semibold leading-6 text-white">{step.title}</h3>
+                          <p className="mt-2 text-sm leading-6 text-[#aeb4bb]">{step.body}</p>
+                        </div>
+                      </article>
+                    </BlurFade>
+                  ))}
+                </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                {howItWorks.map((step, index) => (
-                  <article key={step.title} className="overflow-hidden rounded-xl bg-[#101010]">
-                    <div
-                      className="min-h-[12rem] bg-cover bg-center"
-                      style={{
-                        backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.38)), url(${step.image})`,
-                      }}
-                    />
-                    <div className="p-4">
-                      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-md bg-[#171717] text-sm font-semibold text-[#9bdcff]">
-                        {index + 1}
-                      </div>
-                      <h3 className="text-base font-semibold leading-6 text-white">{step.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-[#aeb4bb]">{step.body}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
+            </BlurFade>
           </section>
 
           <section className="mt-14 border-t border-white/12 pt-10">
-            <div className="grid gap-6 lg:grid-cols-[0.65fr_1fr] lg:items-start">
-              <div>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
-                  Coach workspace
-                </p>
-                <h2 className="mt-2 max-w-md text-3xl font-semibold leading-tight text-white">
-                  Built around the daily nutrition jobs trainers repeat.
-                </h2>
+            <BlurFade>
+              <div className="grid gap-6 lg:grid-cols-[0.65fr_1fr] lg:items-start">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                    Coach workspace
+                  </p>
+                  <h2 className="mt-2 max-w-md text-3xl font-semibold leading-tight text-white">
+                    Built around the daily nutrition jobs trainers repeat.
+                  </h2>
+                </div>
+                <MagicBento items={bentoItems} />
               </div>
-              <MagicBento items={bentoItems} />
-            </div>
+            </BlurFade>
           </section>
 
           <section className="mt-14 grid gap-6 border-t border-white/12 pt-10 lg:grid-cols-[0.8fr_1.2fr]">
-            <PhotoPanel
-              image={photos.workspace}
-              eyebrow="Trainer rhythm"
-              title="A workspace that feels less like admin."
-              body="NutriRelay keeps the review flow calm: intake, adherence, and weekly summaries."
-              className="min-h-[25rem]"
-            />
-            <div className="grid content-center gap-4 rounded-xl border border-white/10 bg-[#101010] p-6 sm:p-8">
-              <div
-                className="min-h-[13rem] overflow-hidden rounded-lg bg-cover bg-center"
-                style={{
-                  backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.trainerControl})`,
-                }}
+            <BlurFade>
+              <PhotoPanel
+                image={photos.workspace}
+                eyebrow="Trainer rhythm"
+                title="A workspace that feels less like admin."
+                body="NutriRelay keeps the review flow calm: intake, adherence, and weekly summaries."
+                className="min-h-[25rem]"
               />
-              <div className="flex items-center gap-3">
-                <Sparkles size={18} className="text-[#9bdcff]" />
-                <h2 className="text-2xl font-semibold text-white">Trainer stays in control.</h2>
+            </BlurFade>
+            <BlurFade delay={100}>
+              <div className="grid content-center gap-4 rounded-xl border border-white/10 bg-[#101010] p-6 sm:p-8">
+                <div
+                  className="min-h-[13rem] overflow-hidden rounded-lg bg-cover bg-center"
+                  style={{
+                    backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.trainerControl})`,
+                  }}
+                />
+                <div className="flex items-center gap-3">
+                  <Sparkles size={18} className="text-[#9bdcff]" />
+                  <h2 className="text-2xl font-semibold text-white">Trainer stays in control.</h2>
+                </div>
+                <p className="max-w-2xl text-sm leading-7 text-[#b9bec5]">
+                  AI can prepare notes and group updates, but trainers still review nutrition decisions before action.
+                </p>
+                <div className="grid gap-2 text-sm text-[#d8dce0] sm:grid-cols-3">
+                  {["Review first", "Correct logs", "Trace decisions"].map((item) => (
+                    <div key={item} className="flex items-center gap-2">
+                      <CheckCircle2 size={15} className="text-[#9bdcff]" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="max-w-2xl text-sm leading-7 text-[#b9bec5]">
-                AI can prepare notes and group updates, but trainers still review nutrition decisions before action.
-              </p>
-              <div className="grid gap-2 text-sm text-[#d8dce0] sm:grid-cols-3">
-                {["Review first", "Correct logs", "Trace decisions"].map((item) => (
-                  <div key={item} className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-[#9bdcff]" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            </BlurFade>
           </section>
 
           <section className="mt-14 border-t border-white/12 pt-10">
-            <div className="mb-7 grid gap-4 lg:grid-cols-[0.72fr_1fr] lg:items-end">
-              <div>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
-                  Pricing
+            <BlurFade>
+              <div className="mb-7 grid gap-4 lg:grid-cols-[0.72fr_1fr] lg:items-end">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                    Pricing
+                  </p>
+                  <h2 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight text-white">
+                    Start with a manual pilot, then choose the roster size that fits.
+                  </h2>
+                </div>
+                <p className="max-w-2xl text-sm leading-6 text-[#aeb4bb] lg:justify-self-end">
+                  No fake automatic activation. Payment remains manual QR/UPI with operator verification.
                 </p>
-                <h2 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight text-white">
-                  Start with a manual pilot, then choose the roster size that fits.
-                </h2>
               </div>
-              <p className="max-w-2xl text-sm leading-6 text-[#aeb4bb] lg:justify-self-end">
-                No fake automatic activation. Payment remains manual QR/UPI with operator verification.
-              </p>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-5">
-              {pricingCards.map((plan) => {
-                const isPro = plan.key === "pro"
-                return (
-                  <SpotlightCard
-                    key={plan.key}
-                    className={`rounded-xl border p-4 ${
-                      isPro ? "border-[#63ffb7]/55 bg-[#10201a]" : "border-white/10 bg-[#101010]"
-                    }`}
-                    color={isPro ? "rgba(95, 228, 166, 0.22)" : "rgba(155, 220, 255, 0.12)"}
-                  >
-                    <div className="relative z-10 flex min-h-full flex-col">
-                      <div className="flex min-h-16 items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-white">{plan.name}</p>
-                          <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">{plan.headline}</p>
+              <div className="grid gap-4 lg:grid-cols-5">
+                {pricingCards.map((plan, index) => {
+                  const isPro = plan.key === "pro"
+                  const card = (
+                    <SpotlightCard
+                      className={`h-full rounded-xl border p-4 ${
+                        isPro ? "border-[#63ffb7]/55 bg-[#10201a]" : "border-white/10 bg-[#101010]"
+                      }`}
+                      color={isPro ? "rgba(95, 228, 166, 0.22)" : "rgba(155, 220, 255, 0.12)"}
+                    >
+                      <div className="relative z-10 flex min-h-full flex-col">
+                        <div className="flex min-h-16 items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-white">{plan.name}</p>
+                            <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">{plan.headline}</p>
+                          </div>
+                          {"badgeLabel" in plan && plan.badgeLabel ? (
+                            <span className="rounded-full border border-[#63ffb7]/30 bg-[#63ffb7]/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[#a7ffd1]">
+                              <ShinyText base="#a7ffd1" highlight="#ffffff">{plan.badgeLabel}</ShinyText>
+                            </span>
+                          ) : null}
                         </div>
-                        {"badgeLabel" in plan && plan.badgeLabel ? (
-                          <span className="rounded-full border border-[#63ffb7]/30 bg-[#63ffb7]/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[#a7ffd1]">
-                            <ShinyText base="#a7ffd1" highlight="#ffffff">{plan.badgeLabel}</ShinyText>
-                          </span>
-                        ) : null}
+                        <p className="mt-4 text-lg font-semibold text-white">
+                          {plan.key === "pro" && plan.priceInr ? (
+                            <>
+                              ₹<NumberTicker value={plan.priceInr} /> {plan.intervalLabel}
+                            </>
+                          ) : (
+                            formatBillingPrice(plan)
+                          )}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">
+                          {plan.trialDays ? (
+                            <>
+                              <NumberTicker value={plan.trialDays} /> days · <NumberTicker value={plan.clientLimit} /> active clients
+                            </>
+                          ) : plan.clientLimit <= 25 ? (
+                            <>
+                              <NumberTicker value={plan.clientLimit} /> active clients
+                            </>
+                          ) : (
+                            plan.clientLimitLabel
+                          )}
+                        </p>
+                        <p className="mt-4 text-xs leading-5 text-[#8f969e]">{plan.helperText}</p>
                       </div>
-                      <p className="mt-4 text-lg font-semibold text-white">{formatBillingPrice(plan)}</p>
-                      <p className="mt-1 text-xs leading-5 text-[#aeb4bb]">{plan.clientLimitLabel}</p>
-                      <p className="mt-4 text-xs leading-5 text-[#8f969e]">{plan.helperText}</p>
-                    </div>
-                  </SpotlightCard>
-                )
-              })}
-            </div>
+                    </SpotlightCard>
+                  )
+
+                  return (
+                    <BlurFade delay={index * 70} key={plan.key}>
+                      {isPro ? <BorderBeam className="h-full rounded-xl">{card}</BorderBeam> : card}
+                    </BlurFade>
+                  )
+                })}
+              </div>
+            </BlurFade>
           </section>
 
           <section className="mt-14 grid gap-6 border-t border-white/12 pt-10 lg:grid-cols-2">
-            <div>
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
-                Trust and safety
-              </p>
-              <h2 className="mt-2 text-3xl font-semibold leading-tight text-white">
-                Nutrition operations software, not medical advice.
-              </h2>
-            </div>
-            <div className="space-y-3 text-sm leading-6 text-[#b9bec5]">
-              <p>
-                Trainers remain responsible for consent, coaching judgment, and how AI-assisted notes are used.
-              </p>
-              <p>
-                WhatsApp workflows depend on Meta platform availability and account setup. NutriRelay should not be
-                used for diagnosis, treatment, or guaranteed outcome claims.
-              </p>
-            </div>
+            <BlurFade>
+              <div>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9ba2aa]">
+                  Trust and safety
+                </p>
+                <h2 className="mt-2 text-3xl font-semibold leading-tight text-white">
+                  Nutrition operations software, not medical advice.
+                </h2>
+              </div>
+            </BlurFade>
+            <BlurFade delay={100}>
+              <div className="space-y-3 text-sm leading-6 text-[#b9bec5]">
+                <p>
+                  Trainers remain responsible for consent, coaching judgment, and how AI-assisted notes are used.
+                </p>
+                <p>
+                  WhatsApp workflows depend on Meta platform availability and account setup. NutriRelay should not be
+                  used for diagnosis, treatment, or guaranteed outcome claims.
+                </p>
+              </div>
+            </BlurFade>
           </section>
 
-          <section className="mt-14 overflow-hidden rounded-xl border border-white/12 bg-[#101010]">
-            <div className="grid gap-0 lg:grid-cols-[1fr_0.78fr]">
-              <div className="p-6 sm:p-8">
-                <h2 className="text-3xl font-semibold leading-tight text-white">
-                  Keep nutrition review visual, fast, and trainer-led.
-                </h2>
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-[#aeb4bb]">
-                  Meal photos, macro checks, follow-ups, and reports stay in one place.
-                </p>
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                  <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px">
+          <BlurFade>
+            <section className="mt-14 overflow-hidden rounded-xl border border-white/12 bg-[#101010]">
+              <div className="grid gap-0 lg:grid-cols-[1fr_0.78fr]">
+                <div className="p-6 sm:p-8">
+                  <h2 className="text-3xl font-semibold leading-tight text-white">
+                    Keep nutrition review visual, fast, and trainer-led.
+                  </h2>
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-[#aeb4bb]">
+                    Meal photos, macro checks, follow-ups, and reports stay in one place.
+                  </p>
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                    <BorderGlow className="inline-flex w-fit shrink-0 rounded-md p-px">
+                      <Link
+                        href="/login"
+                        className="inline-flex items-center justify-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
+                      >
+                        Start trial
+                        <ArrowRight size={16} />
+                      </Link>
+                    </BorderGlow>
                     <Link
-                      href="/login"
-                      className="inline-flex items-center justify-center gap-2 rounded-[calc(0.375rem-1px)] bg-white px-5 py-3 text-sm font-semibold text-[#080808] transition-colors hover:bg-[#e6e6e6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9bdcff]"
+                      href="/privacy"
+                      className="inline-flex items-center justify-center rounded-md border border-white/18 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/8"
                     >
-                      Start trial
-                      <ArrowRight size={16} />
+                      Read privacy policy
                     </Link>
-                  </BorderGlow>
-                  <Link
-                    href="/privacy"
-                    className="inline-flex items-center justify-center rounded-md border border-white/18 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/8"
-                  >
-                    Read privacy policy
-                  </Link>
+                  </div>
                 </div>
+                <div
+                  className="min-h-[18rem] bg-cover bg-center"
+                  style={{
+                    backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.mealSummary})`,
+                  }}
+                />
               </div>
-              <div
-                className="min-h-[18rem] bg-cover bg-center"
-                style={{
-                  backgroundImage: `linear-gradient(180deg, rgba(8, 8, 8, 0.02), rgba(8, 8, 8, 0.34)), url(${photos.mealSummary})`,
-                }}
-              />
-            </div>
-          </section>
+            </section>
+          </BlurFade>
         </main>
 
         <footer className="border-t border-white/12 py-5">

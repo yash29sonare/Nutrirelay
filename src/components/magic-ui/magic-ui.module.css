@@ -1,0 +1,153 @@
+.blurFade {
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateY(var(--blur-offset, 16px));
+  transition:
+    opacity var(--blur-duration, 520ms) cubic-bezier(0.22, 1, 0.36, 1),
+    filter var(--blur-duration, 520ms) cubic-bezier(0.22, 1, 0.36, 1),
+    transform var(--blur-duration, 520ms) cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--blur-delay, 0ms);
+  will-change: opacity, filter, transform;
+}
+
+.blurFadeVisible {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0);
+}
+
+.animatedList {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.animatedListItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.65rem;
+  background: rgba(0, 0, 0, 0.42);
+  padding: 0.72rem 0.8rem;
+  opacity: 0.62;
+  transform: translateY(0);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease;
+  backdrop-filter: blur(12px);
+}
+
+.animatedListItemActive {
+  opacity: 1;
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--item-accent, #63ffb7) 46%, transparent);
+  background: rgba(4, 20, 13, 0.66);
+}
+
+.workflowDot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: var(--item-accent, #63ffb7);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--item-accent, #63ffb7) 60%, transparent);
+}
+
+.marqueeMask {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+}
+
+.marqueeTrack {
+  display: flex;
+  width: max-content;
+  gap: 1rem;
+  animation: marqueeSlide var(--marquee-duration, 36s) linear infinite;
+}
+
+.marqueeTrack:hover {
+  animation-play-state: paused;
+}
+
+.marqueeItem {
+  flex: 0 0 auto;
+}
+
+.borderBeam {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.borderBeam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--beam-angle, 0deg),
+    transparent 0deg,
+    transparent 92deg,
+    rgba(99, 255, 183, 0.86) 128deg,
+    rgba(155, 220, 255, 0.72) 160deg,
+    transparent 218deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: beamSpin 8s linear infinite;
+}
+
+.borderBeam > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes marqueeSlide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-50% - 0.5rem));
+  }
+}
+
+@keyframes beamSpin {
+  to {
+    --beam-angle: 360deg;
+  }
+}
+
+@property --beam-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blurFade {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    transition: none;
+  }
+
+  .animatedListItem,
+  .animatedListItemActive {
+    opacity: 1;
+    transform: none;
+  }
+
+  .marqueeTrack,
+  .borderBeam::before {
+    animation: none;
+  }
+}
