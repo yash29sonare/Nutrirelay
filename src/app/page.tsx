@@ -297,17 +297,23 @@ export default function LandingPage() {
 
           <section className="mt-14 border-t pt-10" style={{ borderColor: "var(--landing-border)" }}>
             <BlurFade>
-              <div className="grid gap-8 lg:grid-cols-[0.7fr_1fr] lg:items-start">
-                <div>
-                  <p className={`${landing.eyebrow} text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
-                    How it works
-                  </p>
-                  <h2 className={`${landing.textPrimary} mt-2 max-w-md text-3xl font-semibold leading-tight`}>
-                    A shorter path from client update to coach action.
-                  </h2>
-                </div>
-                <StickyScrollReveal items={howItWorks} />
-              </div>
+              <StickyScrollReveal
+                items={howItWorks}
+                intro={
+                  <>
+                    <p className={`${landing.eyebrow} text-[0.68rem] font-semibold uppercase tracking-[0.16em]`}>
+                      How it works
+                    </p>
+                    <h2 className={`${landing.textPrimary} mt-2 max-w-md text-3xl font-semibold leading-tight`}>
+                      A shorter path from client update to coach action.
+                    </h2>
+                    <p className={`${landing.textMuted} mt-4 max-w-lg text-sm leading-7`}>
+                      Client updates become structured nutrition context without taking the trainer out of the final
+                      decision.
+                    </p>
+                  </>
+                }
+              />
             </BlurFade>
           </section>
 

@@ -199,31 +199,36 @@ export function MovingBorder({
 export function StickyScrollReveal({
   items,
   className = "",
+  intro,
 }: {
   items: Array<{ title: string; body: string; image: string }>;
   className?: string;
+  intro?: ReactNode;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const activeItem = items[activeIndex] ?? items[0];
 
   return (
     <div className={cx(styles.stickyReveal, className)}>
-      <div className={styles.stickyRevealList}>
-        {items.map((item, index) => (
-          <article
-            className={cx(styles.stickyRevealItem, index === activeIndex && styles.stickyRevealItemActive)}
-            key={item.title}
-            onFocus={() => setActiveIndex(index)}
-            onPointerEnter={() => setActiveIndex(index)}
-            tabIndex={0}
-          >
-            <div className={styles.stickyRevealIndex}>{index + 1}</div>
-            <div>
-              <h3>{item.title}</h3>
-              <p>{item.body}</p>
-            </div>
-          </article>
-        ))}
+      <div className={styles.stickyRevealContent}>
+        {intro ? <div className={styles.stickyRevealIntro}>{intro}</div> : null}
+        <div className={styles.stickyRevealList}>
+          {items.map((item, index) => (
+            <article
+              className={cx(styles.stickyRevealItem, index === activeIndex && styles.stickyRevealItemActive)}
+              key={item.title}
+              onFocus={() => setActiveIndex(index)}
+              onPointerEnter={() => setActiveIndex(index)}
+              tabIndex={0}
+            >
+              <div className={styles.stickyRevealIndex}>{index + 1}</div>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
       </div>
       <div className={styles.stickyRevealMedia} aria-hidden="true">
         <div
