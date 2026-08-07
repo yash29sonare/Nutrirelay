@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge"
 import { Activity, ArrowUpRight, Bot, CheckCircle2, CircleAlert, ClipboardCheck, Clock, CreditCard, LifeBuoy, MessageSquare, QrCode, Shield } from "lucide-react"
 import { SettingsAccountSection } from "./SettingsAccountSection"
 import { SettingsProfileForm } from "./SettingsProfileForm"
+import { WhatsAppEmbeddedSignupButton } from "./WhatsAppEmbeddedSignupButton"
 import { getManualWabaOnboardingReadiness, type ManualWabaCredentialState } from "@/lib/waba/manual-onboarding-readiness"
 import { formatDateTime } from "@/lib/format"
 import { BILLING_PLAN_ORDER, BILLING_PLANS, formatBillingPrice, getBillingPlan } from "@/lib/billing/plans"
@@ -114,6 +115,8 @@ const SUPPORT_LINKS = [
   },
 ] as const
 
+const DEFAULT_GRAPH_API_VERSION = "v20.0"
+
 function PlanFeatureList({ features }: { features: readonly string[] }) {
   return (
     <ul className="space-y-1.5 text-xs leading-5 text-[var(--muted)]">
@@ -160,6 +163,9 @@ export default async function SettingsPage() {
   const clientReadiness = readiness?.clientReadiness ?? null
   const hasReadyClient = Boolean(clientReadiness?.readyClient)
   const pilotSignals = readiness?.pilotSignals ?? null
+  const metaAppId = process.env.META_APP_ID?.trim() || process.env.NEXT_PUBLIC_META_APP_ID?.trim() || null
+  const embeddedSignupConfigId = process.env.META_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null
+  const graphApiVersion = process.env.META_GRAPH_API_VERSION?.trim() || DEFAULT_GRAPH_API_VERSION
 
   return (
     <PageContainer>
@@ -307,13 +313,22 @@ export default async function SettingsPage() {
               <div>
                 <CardTitle>WhatsApp Connection</CardTitle>
                 <CardDescription>
-                  Manual WABA onboarding status for this trainer. Self-serve Embedded Signup is not enabled yet.
+                  Connect or review this trainer&apos;s WhatsApp Business connection.
                 </CardDescription>
               </div>
-              <Badge variant="brand">Manual WABA onboarding</Badge>
+              <Badge variant={isCredentialConnected ? "success" : "warning"}>
+                {isCredentialConnected ? "Connected" : "Not connected"}
+              </Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
+            <WhatsAppEmbeddedSignupButton
+              appId={metaAppId}
+              configId={embeddedSignupConfigId}
+              graphApiVersion={graphApiVersion}
+              hasCredential={hasCredential}
+            />
+
             <div className="flex flex-col gap-3 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -326,7 +341,7 @@ export default async function SettingsPage() {
                   {credential ? connectionMessage(credential.state) : "No WhatsApp credential is connected for this trainer."}
                 </p>
                 <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                  Manual WABA onboarding requires operator-secured credential setup. Saved credential status is shown from NutriRelay only; this is not live Meta validation.
+                  Saved credential status is shown from NutriRelay. Access tokens and app secrets are never rendered in this browser UI.
                 </p>
               </div>
               {!isCredentialConnected ? (
@@ -341,19 +356,15 @@ export default async function SettingsPage() {
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-[var(--foreground)]">Reconnect lifecycle</h3>
                   <p className="text-xs leading-5 text-[var(--muted)]">
-                    Self-serve reconnect is not enabled yet. Operator-assisted credential refresh is required for the manual pilot if a saved credential becomes expired, disconnected, or invalid.
+                    Use Reconnect WhatsApp Business if a saved credential becomes expired, disconnected, or invalid.
                   </p>
                   <p className="text-xs leading-5 text-[var(--muted)]">
-                    Existing WhatsApp Business App numbers may be supported later through Meta coexistence.
+                    The callback updates only this authenticated trainer&apos;s `trainer_waba_credentials` row.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--muted)]"
-                >
-                  Self-serve reconnect unavailable
-                </button>
+                <Badge variant={hasCredential ? "success" : "warning"}>
+                  {hasCredential ? "Reconnect available" : "Connect required"}
+                </Badge>
               </div>
             </div>
 
@@ -366,17 +377,17 @@ export default async function SettingsPage() {
                   <div>
                     <h3 className="text-sm font-semibold text-[var(--foreground)]">Meta Connect readiness</h3>
                     <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-                      Manual WABA onboarding is available now. Self-serve Meta Embedded Signup is coming later and is not claimed as working here.
+                      Meta Embedded Signup is available when the Meta app ID, app secret, and Embedded Signup configuration ID are configured.
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <ChecklistItem done={false} label="Meta app configured" detail="External Meta dashboard setup is completed outside NutriRelay." />
-                    <ChecklistItem done={false} label="Business verification and app review" detail="Required before self-serve production onboarding can be enabled." />
-                    <ChecklistItem done={false} label="WhatsApp product and permissions ready" detail="WhatsApp Business Management and messaging permissions must be approved by Meta." />
-                    <ChecklistItem done={false} label="Production callback subscribed" detail="Webhook callback and messages field subscription are verified during real onboarding." />
+                    <ChecklistItem done={Boolean(metaAppId)} label="Meta app ID configured" detail={metaAppId ? "Public app ID is available to launch the Meta SDK." : "Set META_APP_ID."} />
+                    <ChecklistItem done={Boolean(embeddedSignupConfigId)} label="Embedded Signup configuration ID configured" detail={embeddedSignupConfigId ? "Configuration ID is available." : "Set META_EMBEDDED_SIGNUP_CONFIG_ID."} />
+                    <ChecklistItem done={Boolean(process.env.META_APP_SECRET?.trim())} label="Meta app secret configured server-side" detail="Required only on the callback route for code exchange." />
+                    <ChecklistItem done label="Callback stores trainer-scoped credentials" detail="/api/meta/embedded-signup/callback uses the authenticated trainer context." />
                   </div>
                   <p className="text-xs leading-5 text-[var(--muted)]">
-                    Safe config boundary: public Meta app ID can be added later as `NEXT_PUBLIC_META_APP_ID`; server secrets such as `META_APP_SECRET` must remain server-side.
+                    Safe config boundary: Meta app ID and config ID are public launch values; `META_APP_SECRET` and access tokens remain server-side.
                   </p>
                 </div>
               </div>
@@ -457,17 +468,10 @@ export default async function SettingsPage() {
             </div>
 
             <div className="flex flex-col gap-2 rounded-xl border border-dashed border-[var(--surface-border)] bg-[var(--surface-overlay)]/40 p-4 text-xs leading-5 text-[var(--muted)]">
-              <p>Self-serve Embedded Signup is not enabled yet.</p>
-              <p>Manual onboarding and future self-serve connection are intentionally separate flows.</p>
-              <p>No Meta API call, token refresh, or live WhatsApp send is required for this readiness screen.</p>
+              <p>Embedded Signup connection is launched from the WhatsApp Connection section above.</p>
+              <p>Manual onboarding remains available for operator-assisted testing.</p>
+              <p>No live WhatsApp send is required for this readiness screen.</p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--muted)]"
-                >
-                  Connect WhatsApp later
-                </button>
                 <Link
                   href="/dashboard/whatsapp-dev"
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface-overlay)]"
