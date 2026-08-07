@@ -256,7 +256,7 @@ export function WhatsAppEmbeddedSignupButton({
           {message ? <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{message}</p> : null}
           {!isConfigured ? (
             <p className="mt-2 text-xs leading-5 text-[var(--warning)]">
-              Configure META_APP_ID and META_EMBEDDED_SIGNUP_CONFIG_ID to enable the button.
+              Configure NEXT_PUBLIC_META_APP_ID and NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID to enable the browser launcher.
             </p>
           ) : null}
         </div>

@@ -163,8 +163,10 @@ export default async function SettingsPage() {
   const clientReadiness = readiness?.clientReadiness ?? null
   const hasReadyClient = Boolean(clientReadiness?.readyClient)
   const pilotSignals = readiness?.pilotSignals ?? null
-  const metaAppId = process.env.META_APP_ID?.trim() || process.env.NEXT_PUBLIC_META_APP_ID?.trim() || null
-  const embeddedSignupConfigId = process.env.META_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null
+  const metaAppId = process.env.NEXT_PUBLIC_META_APP_ID?.trim() || null
+  const embeddedSignupConfigId = process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null
+  const hasServerMetaAppId = Boolean(process.env.META_APP_ID?.trim())
+  const hasServerEmbeddedSignupConfigId = Boolean(process.env.META_EMBEDDED_SIGNUP_CONFIG_ID?.trim())
   const graphApiVersion = process.env.META_GRAPH_API_VERSION?.trim() || DEFAULT_GRAPH_API_VERSION
 
   return (
@@ -381,13 +383,13 @@ export default async function SettingsPage() {
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <ChecklistItem done={Boolean(metaAppId)} label="Meta app ID configured" detail={metaAppId ? "Public app ID is available to launch the Meta SDK." : "Set META_APP_ID."} />
-                    <ChecklistItem done={Boolean(embeddedSignupConfigId)} label="Embedded Signup configuration ID configured" detail={embeddedSignupConfigId ? "Configuration ID is available." : "Set META_EMBEDDED_SIGNUP_CONFIG_ID."} />
+                    <ChecklistItem done={Boolean(metaAppId)} label="Public Meta app ID configured" detail={metaAppId ? "NEXT_PUBLIC_META_APP_ID is available to launch the Meta SDK." : "Set NEXT_PUBLIC_META_APP_ID for the browser launcher."} />
+                    <ChecklistItem done={Boolean(embeddedSignupConfigId)} label="Public Embedded Signup configuration ID configured" detail={embeddedSignupConfigId ? "NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID is available to launch Embedded Signup." : "Set NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID for the browser launcher."} />
+                    <ChecklistItem done={hasServerMetaAppId && hasServerEmbeddedSignupConfigId} label="Server callback IDs configured" detail="META_APP_ID and META_EMBEDDED_SIGNUP_CONFIG_ID are used server-side by the callback." />
                     <ChecklistItem done={Boolean(process.env.META_APP_SECRET?.trim())} label="Meta app secret configured server-side" detail="Required only on the callback route for code exchange." />
-                    <ChecklistItem done label="Callback stores trainer-scoped credentials" detail="/api/meta/embedded-signup/callback uses the authenticated trainer context." />
                   </div>
                   <p className="text-xs leading-5 text-[var(--muted)]">
-                    Safe config boundary: Meta app ID and config ID are public launch values; `META_APP_SECRET` and access tokens remain server-side.
+                    Safe config boundary: `NEXT_PUBLIC_META_APP_ID` and `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID` are public launch IDs. `META_APP_SECRET` and access tokens remain server-side.
                   </p>
                 </div>
               </div>
