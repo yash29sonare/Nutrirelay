@@ -5,6 +5,14 @@ import { getWhatsAppServiceDb, normalizeWhatsAppPhone } from "@/lib/whatsapp/ser
 export const dynamic = "force-dynamic"
 
 const DEFAULT_GRAPH_API_VERSION = "v20.0"
+const EMBEDDED_SIGNUP_FINISH_EVENTS = new Set([
+  "FINISH",
+  "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING",
+])
+const EMBEDDED_SIGNUP_MODES = new Set([
+  "cloud_api",
+  "business_app_onboarding",
+])
 
 interface EmbeddedSignupCallbackBody {
   code?: string
@@ -12,6 +20,8 @@ interface EmbeddedSignupCallbackBody {
   business_account_id?: string | null
   phone_number_id?: string | null
   phone_number?: string | null
+  embedded_signup_event?: string | null
+  embedded_signup_mode?: string | null
 }
 
 interface MetaTokenResponse {
@@ -127,6 +137,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const code = body.code?.trim()
   if (!code) {
     return NextResponse.json({ ok: false, error: "MISSING_CODE" }, { status: 400 })
+  }
+
+  const embeddedSignupEvent = safeId(body.embedded_signup_event)
+  if (embeddedSignupEvent && !EMBEDDED_SIGNUP_FINISH_EVENTS.has(embeddedSignupEvent)) {
+    return NextResponse.json({ ok: false, error: "INVALID_EMBEDDED_SIGNUP_EVENT" }, { status: 400 })
+  }
+
+  const embeddedSignupMode = safeId(body.embedded_signup_mode)
+  if (embeddedSignupMode && !EMBEDDED_SIGNUP_MODES.has(embeddedSignupMode)) {
+    return NextResponse.json({ ok: false, error: "INVALID_EMBEDDED_SIGNUP_MODE" }, { status: 400 })
   }
 
   const wabaId = safeId(body.waba_id)

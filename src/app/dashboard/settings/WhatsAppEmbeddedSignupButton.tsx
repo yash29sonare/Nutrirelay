@@ -5,6 +5,8 @@ import type { RefObject } from "react"
 import { CheckCircle2, CircleAlert, Loader2, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 
+type SignupMode = "cloud_api" | "business_app_onboarding"
+type SignupFinishEvent = "FINISH" | "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
 type SignupState = "not_connected" | "connecting" | "connected" | "error"
 
 interface EmbeddedSignupMessage {
@@ -82,6 +84,36 @@ async function waitForSignupData(ref: RefObject<EmbeddedSignupMessage["data"] | 
   return ref.current
 }
 
+function isSignupFinishEvent(event: string | undefined): event is SignupFinishEvent {
+  return event === "FINISH" || event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
+}
+
+function getSignupLoginOptions(configId: string, mode: SignupMode) {
+  const baseOptions = {
+    config_id: configId,
+    response_type: "code",
+    override_default_response_type: true,
+  }
+
+  if (mode === "business_app_onboarding") {
+    return {
+      ...baseOptions,
+      extras: {
+        setup: {},
+        featureType: "whatsapp_business_app_onboarding",
+        sessionInfoVersion: "3",
+      },
+    }
+  }
+
+  return {
+    ...baseOptions,
+    extras: {
+      sessionInfoVersion: "3",
+    },
+  }
+}
+
 export function WhatsAppEmbeddedSignupButton({
   appId,
   configId,
@@ -94,9 +126,11 @@ export function WhatsAppEmbeddedSignupButton({
   hasCredential: boolean
 }) {
   const [state, setState] = useState<SignupState>(hasCredential ? "connected" : "not_connected")
+  const [connectingMode, setConnectingMode] = useState<SignupMode | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [credential, setCredential] = useState<CallbackResponse["credential"] | null>(null)
   const signupDataRef = useRef<EmbeddedSignupMessage["data"] | null>(null)
+  const signupEventRef = useRef<SignupFinishEvent | null>(null)
   const sdkReadyRef = useRef(false)
 
   const isConfigured = Boolean(appId && configId)
@@ -108,8 +142,9 @@ export function WhatsAppEmbeddedSignupButton({
       const parsed = parseEmbeddedSignupMessage(event.data)
       if (!parsed) return
 
-      if (parsed.event === "FINISH") {
+      if (isSignupFinishEvent(parsed.event)) {
         signupDataRef.current = parsed.data ?? null
+        signupEventRef.current = parsed.event
       }
 
       if (parsed.event === "CANCEL") {
@@ -151,7 +186,7 @@ export function WhatsAppEmbeddedSignupButton({
     document.body.appendChild(script)
   }, [appId, graphApiVersion])
 
-  async function completeConnection(code: string) {
+  async function completeConnection(code: string, mode: SignupMode) {
     const signupData = await waitForSignupData(signupDataRef)
 
     const response = await fetch("/api/meta/embedded-signup/callback", {
@@ -166,6 +201,10 @@ export function WhatsAppEmbeddedSignupButton({
           ?? null,
         phone_number_id: signupData?.phone_number_id ?? null,
         phone_number: signupData?.phone_number ?? null,
+        embedded_signup_event:
+          signupEventRef.current
+          ?? (mode === "business_app_onboarding" ? "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING" : "FINISH"),
+        embedded_signup_mode: mode,
       }),
     })
 
@@ -176,48 +215,48 @@ export function WhatsAppEmbeddedSignupButton({
 
     setCredential(json.credential ?? null)
     setState("connected")
+    setConnectingMode(null)
     setMessage("WhatsApp Business connected.")
   }
 
-  function launchSignup() {
+  function launchSignup(mode: SignupMode) {
     if (!appId || !configId) {
       setState("error")
+      setConnectingMode(null)
       setMessage("Meta Embedded Signup is not configured.")
       return
     }
 
     if (!window.FB || !sdkReadyRef.current) {
       setState("error")
+      setConnectingMode(null)
       setMessage("Meta SDK is still loading. Try again in a moment.")
       return
     }
 
     setState("connecting")
+    setConnectingMode(mode)
     setMessage(null)
     signupDataRef.current = null
+    signupEventRef.current = null
 
     window.FB.login(
       (response) => {
         const code = response.authResponse?.code
         if (!code) {
           setState(hasCredential ? "connected" : "not_connected")
+          setConnectingMode(null)
           setMessage("Meta did not return an authorization code.")
           return
         }
 
-        void completeConnection(code).catch((error) => {
+        void completeConnection(code, mode).catch((error) => {
           setState("error")
+          setConnectingMode(null)
           setMessage(error instanceof Error ? error.message : "Unable to connect WhatsApp Business.")
         })
       },
-      {
-        config_id: configId,
-        response_type: "code",
-        override_default_response_type: true,
-        extras: {
-          sessionInfoVersion: "3",
-        },
-      },
+      getSignupLoginOptions(configId, mode),
     )
   }
 
@@ -260,16 +299,28 @@ export function WhatsAppEmbeddedSignupButton({
             </p>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="brand"
-          icon={<MessageSquare size={15} />}
-          loading={state === "connecting"}
-          disabled={!isConfigured}
-          onClick={launchSignup}
-        >
-          {hasCredential ? "Reconnect WhatsApp Business" : "Connect WhatsApp Business"}
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            icon={<MessageSquare size={15} />}
+            loading={state === "connecting" && connectingMode === "cloud_api"}
+            disabled={!isConfigured || state === "connecting"}
+            onClick={() => launchSignup("cloud_api")}
+          >
+            Connect new WhatsApp Cloud API number
+          </Button>
+          <Button
+            type="button"
+            variant="brand"
+            icon={<MessageSquare size={15} />}
+            loading={state === "connecting" && connectingMode === "business_app_onboarding"}
+            disabled={!isConfigured || state === "connecting"}
+            onClick={() => launchSignup("business_app_onboarding")}
+          >
+            {hasCredential ? "Reconnect existing WhatsApp Business app number" : "Connect existing WhatsApp Business app number"}
+          </Button>
+        </div>
       </div>
 
       {credential ? (
