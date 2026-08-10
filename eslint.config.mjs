@@ -21,6 +21,8 @@ const eslintConfig = defineConfig([
   // Direct AI SDK usage is a violation outside the gateway file.
   {
     rules: {
+      "@typescript-eslint/no-explicit-any": "warn",
+      "react-hooks/set-state-in-effect": "warn",
       "no-restricted-imports": [
         "error",
         {

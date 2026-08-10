@@ -107,19 +107,19 @@ async function simulatePayload(): Promise<void> {
             value: {
               messaging_product: 'whatsapp',
               metadata: {
-                display_phone_number: '919800000000',
+                display_phone_number: '910000000000',
                 phone_number_id:      'PHONE_NUMBER_ID_PLACEHOLDER',
               },
               contacts: [
                 {
                   profile: { name: 'Test Client' },
-                  wa_id:   '919876543210',
+                  wa_id:   '910000000001',
                 },
               ],
               messages: [
                 {
                   id:        'wamid.simulate_' + Date.now(),
-                  from:      '919876543210',
+                  from:      '910000000001',
                   timestamp: String(Math.floor(Date.now() / 1000)),
                   type:      'text',
                   text: {
@@ -176,7 +176,7 @@ async function simulateStatusUpdate(): Promise<void> {
             value: {
               messaging_product: 'whatsapp',
               metadata: {
-                display_phone_number: '919800000000',
+                display_phone_number: '910000000000',
                 phone_number_id:      'PHONE_NUMBER_ID_PLACEHOLDER',
               },
               statuses: [
@@ -184,7 +184,7 @@ async function simulateStatusUpdate(): Promise<void> {
                   id:          'wamid.status_' + Date.now(),
                   status:      'delivered',
                   timestamp:   String(Math.floor(Date.now() / 1000)),
-                  recipient_id: '919876543210',
+                  recipient_id: '910000000001',
                 },
               ],
             },

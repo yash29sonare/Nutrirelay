@@ -15,8 +15,38 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NutriRelay",
+  metadataBase: new URL("https://nutrirelay.in"),
+  title: {
+    default: "NutriRelay",
+    template: "%s | NutriRelay",
+  },
   description: "Nutrition coaching operations platform with WhatsApp-based meal logging and adherence workflows",
+  openGraph: {
+    title: "NutriRelay",
+    description: "Nutrition coaching operations platform with WhatsApp-based meal logging and adherence workflows",
+    url: "https://nutrirelay.in",
+    siteName: "NutriRelay",
+    images: [
+      {
+        url: "/brand/nutrirelay-logo.png",
+        width: 512,
+        height: 512,
+        alt: "NutriRelay logo",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "NutriRelay",
+    description: "Nutrition coaching operations platform with WhatsApp-based meal logging and adherence workflows",
+    images: ["/brand/nutrirelay-logo.png"],
+  },
+  icons: {
+    icon: "/brand/nutrirelay-logo.png",
+    apple: "/brand/nutrirelay-logo.png",
+  },
 };
 
 export default function RootLayout({
