@@ -18,7 +18,7 @@ INSERT INTO public.profiles (
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'Dev Trainer',
-  '919999999999',
+  '910000000000',
   'trainer',
   now(),
   now()

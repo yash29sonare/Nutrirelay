@@ -11,7 +11,7 @@ import {
 const client: ReportClient = {
   id: "client-1",
   name: "Test Client",
-  phoneNumber: "918720096268",
+  phoneNumber: "910000000000",
   isActive: true,
   goal: {
     goalType: "GAIN_WEIGHT",

@@ -15,11 +15,11 @@ describe("WhatsApp service DB helpers", () => {
   })
 
   it("normalizes WhatsApp phone values to digits", () => {
-    expect(normalizeWhatsAppPhone("+91 98765-43210")).toBe("919876543210")
+    expect(normalizeWhatsAppPhone("+91 00000-00000")).toBe("910000000000")
   })
 
   it("drops one leading local zero after digit extraction", () => {
-    expect(normalizeWhatsAppPhone("09876543210")).toBe("9876543210")
+    expect(normalizeWhatsAppPhone("00000000000")).toBe("0000000000")
   })
 
   it("returns null when no digits are available", () => {

@@ -3,7 +3,7 @@
 export interface WhatsAppTextMessage {
   type: 'text'
   whatsapp_message_id: string
-  from: string          // client phone number e.g. "919876543210"
+  from: string          // client phone number e.g. "910000000001"
   timestamp: number
   text: string
 }
