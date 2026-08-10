@@ -2,7 +2,7 @@
 
 NutriRelay is a trainer-facing nutrition operations app for WhatsApp-first meal logging, review queues, adherence tracking, and report preparation.
 
-Production domain: `https://nutrirelay.in`
+Live site: https://nutrirelay.in
 
 ## Stack
 
