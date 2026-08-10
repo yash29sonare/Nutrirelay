@@ -1,0 +1,102 @@
+{
+  "info": {
+    "name": "NutriRelay API QA",
+    "description": "Sanitized API checks for NutriRelay. Use only disposable dev or staging values. Do not store secrets in this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Trainer clients requires auth",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/trainer/clients",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "trainer", "clients"]
+        }
+      }
+    },
+    {
+      "name": "Owned client detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{trainerSessionCookie}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/trainer/clients/{{ownedClientId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "trainer", "clients", "{{ownedClientId}}"]
+        }
+      }
+    },
+    {
+      "name": "Unowned client detail blocked",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{trainerSessionCookie}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/trainer/clients/{{unownedClientId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "trainer", "clients", "{{unownedClientId}}"]
+        }
+      }
+    },
+    {
+      "name": "Deprecated WhatsApp webhook returns gone",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/webhooks/whatsapp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "webhooks", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Embedded Signup readiness",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{trainerSessionCookie}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/meta/embedded-signup/callback",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "meta", "embedded-signup", "callback"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://www.nutrirelay.in"
+    },
+    {
+      "key": "trainerSessionCookie",
+      "value": ""
+    },
+    {
+      "key": "ownedClientId",
+      "value": ""
+    },
+    {
+      "key": "unownedClientId",
+      "value": ""
+    }
+  ]
+}

@@ -1,36 +1,125 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NutriRelay
 
-## Getting Started
+NutriRelay is a trainer-facing nutrition operations app for WhatsApp-first meal logging, review queues, adherence tracking, and report preparation.
 
-First, run the development server:
+Production domain: `https://nutrirelay.in`
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Stack
+
+- Next.js App Router 16
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Supabase Auth and Postgres
+- Supabase SSR
+- Vercel
+- Vitest
+- Mastra workflows
+- Trigger.dev SDK
+- Meta WhatsApp Cloud API webhook and Embedded Signup integration code
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Browser["Trainer Browser"] --> Next["Next.js App"]
+  Next --> Auth["Supabase Auth"]
+  Next --> API["Route Handlers and Server Actions"]
+  API --> DB["Supabase Postgres"]
+  Meta["Meta WhatsApp"] --> Webhook["/api/webhook/whatsapp"]
+  Webhook --> Queue["PGMQ Queue"]
+  Queue --> Worker["Queue Worker"]
+  Worker --> Pipeline["Mastra WhatsApp Pipeline"]
+  Pipeline --> DB
+  Settings["Settings"] --> Signup["Meta Embedded Signup"]
+  Signup --> Callback["/api/meta/embedded-signup/callback"]
+  Callback --> DB
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Key Workflows
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Public landing page for trainer-facing positioning.
+- Supabase email/password registration and login.
+- Middleware-protected dashboard routes.
+- Trainer dashboard for clients, inbox/communications, reports, analytics, reviews, events, settings, and WhatsApp development tools.
+- Trainer-scoped client access through authenticated route handlers and ownership checks.
+- WhatsApp webhook ingestion, status persistence, queue processing, and AI-assisted meal parsing.
+- Embedded Signup callback for saving WABA and phone metadata under the authenticated trainer.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Local Development
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open `http://localhost:3000`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Verification
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npx tsc --noEmit --pretty false --incremental false
+npm run lint
+npm test
+npm run build
+```
 
-## Deploy on Vercel
+## Environment Variable Names
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Values are intentionally omitted. Do not commit `.env.local`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+DATABASE_URL
+DATABASE_DIRECT_URL
+WHATSAPP_APP_SECRET
+WHATSAPP_VERIFY_TOKEN
+META_APP_ID
+NEXT_PUBLIC_META_APP_ID
+META_APP_SECRET
+META_EMBEDDED_SIGNUP_CONFIG_ID
+NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID
+META_GRAPH_API_VERSION
+GOOGLE_GENERATIVE_AI_API_KEY
+RESEND_API_KEY
+TELEGRAM_BOT_TOKEN
+TELEGRAM_TRAINER_CHAT_ID
+NEXT_PUBLIC_APP_URL
+CRON_SECRET
+LOG_LEVEL
+TRIGGER_SECRET_KEY
+```
+
+## Database
+
+- Migrations live in `supabase/migrations`.
+- Core tenant model uses `profiles`, `trainer_clients`, meal/report tables, WhatsApp credential tables, and webhook/status logging tables.
+- RLS policies are defined in migrations and should be validated in a disposable dev/staging project before production changes.
+- Do not run `supabase db push` against production without explicit approval.
+
+## QA Artifacts
+
+- Test plan: `qa/test-plan.md`
+- Auth cases: `qa/auth-test-cases.md`
+- RLS cases: `qa/rls-test-cases.md`
+- API checklist: `qa/api-checklist.md`
+- Sample bug reports: `qa/bug-report-examples.md`
+- Sanitized Postman collection: `qa/postman/nutrirelay-api.postman_collection.json`
+- Recruiter-facing case study: `docs/nutrirelay-case-study.md`
+
+## Security Notes
+
+- Browser code may use only `NEXT_PUBLIC_*` values.
+- Meta app secrets, WhatsApp access tokens, and Supabase service-role keys must remain server-side.
+- Trainer API routes should resolve trainer identity from authenticated session context.
+- Service-role database access bypasses RLS, so route-level authentication and ownership checks are mandatory.
+- Screenshots, docs, logs, and Postman collections must not include real secrets or private client data.
+
+## Current Limitations
+
+- Billing is manual QR/UPI/operator verification, not a live payment gateway.
+- Live WhatsApp completion should not be claimed without verified send, delivery/read status, inbound reply, and dashboard persistence evidence.
+- Public repository/case-study sharing should use sanitized documentation rather than private source or real client data.
+- The working tree may contain uncommitted product changes; verify source state before deploying.
