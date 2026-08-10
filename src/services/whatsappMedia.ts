@@ -1,15 +1,26 @@
 import { createClient } from '@supabase/supabase-js'
 import { getTrainerWaba } from '@/lib/waba/getTrainerWaba'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
-
 const BUCKET = 'whatsapp_media'
 const LOCAL_DEV_MEDIA_PREFIX = 'local-dev:'
 
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      'Supabase admin client is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY at runtime.',
+    )
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
+
 async function ensureBucket(): Promise<void> {
+  const supabaseAdmin = getSupabaseAdmin()
   const { data: buckets } = await supabaseAdmin.storage.listBuckets()
   const exists = buckets?.some((b) => b.name === BUCKET)
   if (!exists) {
@@ -47,6 +58,7 @@ export async function downloadAndStoreWhatsAppMedia(
     const ext = kind === "image" ? "svg" : kind === "audio" ? "ogg" : "bin"
     const storagePath = `${wamId}.${ext}`
 
+    const supabaseAdmin = getSupabaseAdmin()
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
       .upload(storagePath, bytes, {
@@ -109,6 +121,7 @@ export async function downloadAndStoreWhatsAppMedia(
 
   // Step 3 — Upload to Supabase Storage
   await ensureBucket()
+  const supabaseAdmin = getSupabaseAdmin()
 
   const ext         = mimeType.split('/')[1]?.split(';')[0] ?? 'bin'
   const storagePath = `${wamId}.${ext}`

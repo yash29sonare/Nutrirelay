@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js";
-import "@/mastra/index";
 import { handleVerificationChallenge, parseInboundMessage } from "@/shared/utils/whatsapp";
 import { verifySignature } from "@/lib/whatsapp/verify-signature";
 import { createWebhookEventRecord, updateWebhookEventRecord } from "@/lib/whatsapp/webhook-events";
