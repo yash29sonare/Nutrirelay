@@ -41,12 +41,9 @@ export const step2Schema = z.object({
   country: z.enum(countryOptions, { message: "Select a country" }),
 });
 
-export const step3Schema = z.object({});
-
 export const onboardingSchema = z.object({
   ...step1Schema.shape,
   ...step2Schema.shape,
-  ...step3Schema.shape,
 });
 
 export type OnboardingData = z.infer<typeof onboardingSchema>;
@@ -54,13 +51,11 @@ export type OnboardingData = z.infer<typeof onboardingSchema>;
 export const STEP_SCHEMAS = [
   step1Schema,
   step2Schema,
-  step3Schema,
 ] as const;
 
 export const STEP_LABELS = [
   "Welcome",
   "Your Profile",
-  "Done",
 ] as const;
 
 export { timezoneOptions, countryOptions };

@@ -13,12 +13,6 @@ import { ErrorBanner } from "@/components/ui/StatusBanner";
 
 const STEPS = STEP_LABELS.map((label) => ({ label }));
 
-const STEP_COMPONENTS = [
-  StepWelcome,
-  StepProfile,
-  StepComplete,
-];
-
 export default function OnboardingPage() {
   const {
     form,
@@ -39,7 +33,6 @@ export default function OnboardingPage() {
     );
   }
 
-  const StepComponent = STEP_COMPONENTS[currentStep];
   const isWelcomeStep = currentStep === 0;
   const isLastStep = currentStep === totalSteps - 1;
 
@@ -56,10 +49,11 @@ export default function OnboardingPage() {
       <div className="flex-1 flex items-start justify-center px-4 py-8 sm:py-12">
         <div className="w-full max-w-lg">
           <FormProvider {...form}>
-            <StepComponent
-              onContinue={goToNextStep}
-              data={form.getValues()}
-            />
+            {isWelcomeStep ? (
+              <StepWelcome onContinue={goToNextStep} />
+            ) : (
+              <StepProfile />
+            )}
           </FormProvider>
         </div>
       </div>

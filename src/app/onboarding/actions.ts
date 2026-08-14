@@ -19,6 +19,20 @@ export async function completeOnboardingAction(formData: {
       return { error: "Not authenticated" }
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      return { error: `Unable to verify account role: ${profileError.message}` }
+    }
+
+    if (profile?.role === "admin") {
+      return { error: "Admin accounts cannot complete trainer onboarding." }
+    }
+
     // Ensure the trainers row exists before saving data.
     // This bypasses the database trigger chain (auth → profile → trainer)
     // which can fail silently depending on migration state.
