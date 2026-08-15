@@ -31,6 +31,7 @@ import { ClientTimeline } from "./components/ClientTimeline"
 import { MealHistory } from "./components/MealHistory"
 import { ClientNameEditor } from "./components/ClientNameEditor"
 import { WhatsAppClientContactEditor } from "./components/WhatsAppClientContactEditor"
+import { SendOnboardingButton } from "../AddWhatsAppClientDialog"
 import { DailyReviewNav } from "./components/DailyReviewNav"
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
 import { buildTimeline } from "@/lib/timeline/timelineEngine"
@@ -386,6 +387,27 @@ function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMes
   )
 }
 
+async function getWhatsAppConversationWithTimeout(
+  clientId: string,
+  trainerId: string,
+): Promise<{ messages: ClientWhatsAppMessage[]; error: string | null }> {
+  try {
+    const messages = await Promise.race([
+      getClientWhatsAppConversation(clientId, trainerId, 20),
+      new Promise<ClientWhatsAppMessage[]>((resolve) => {
+        setTimeout(() => resolve([]), 5000)
+      }),
+    ])
+    return { messages, error: null }
+  } catch {
+    return { messages: [], error: "WhatsApp conversation history could not be loaded." }
+  }
+}
+
+function canSendWhatsAppOnlyOnboarding(status: string, clientStatus: string): boolean {
+  return clientStatus === "active" && (status === "not_sent" || status === "failed")
+}
+
 export default async function ClientDetailPage({
   params,
   searchParams,
@@ -469,6 +491,146 @@ export default async function ClientDetailPage({
           <ArrowLeft size={14} /> Back to dashboard
         </Link>
         <ErrorState title="Client not found or access denied." />
+      </PageContainer>
+    )
+  }
+
+  if (whatsappClientDetail) {
+    const conversation = await getWhatsAppConversationWithTimeout(id, authUserId)
+
+    return (
+      <PageContainer>
+        <Link
+          href="/dashboard/clients"
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
+        >
+          <ArrowLeft size={14} /> Back to clients
+        </Link>
+
+        <div className="flex items-start gap-4 py-5 flex-wrap" id="page-heading">
+          <Avatar
+            fallback={client.client_name.charAt(0).toUpperCase()}
+            size="lg"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-lg font-semibold text-[var(--foreground)]">
+                {client.client_name}
+              </h1>
+              <Badge variant={whatsappClientDetail.status === "active" ? "success" : "outline"}>
+                {humanizeValue(whatsappClientDetail.status)}
+              </Badge>
+              <Badge
+                variant={
+                  whatsappClientDetail.onboarding_message_status === "sent"
+                    ? "success"
+                    : whatsappClientDetail.onboarding_message_status === "failed"
+                      ? "danger"
+                      : whatsappClientDetail.onboarding_message_status === "pending"
+                        ? "warning"
+                        : "default"
+                }
+              >
+                Onboarding {humanizeValue(whatsappClientDetail.onboarding_message_status).toLowerCase()}
+              </Badge>
+            </div>
+            <p className="text-sm text-[var(--muted)] mt-1">
+              WhatsApp-only client record. Clients do not log in to NutriRelay.
+            </p>
+          </div>
+          {canSendWhatsAppOnlyOnboarding(whatsappClientDetail.onboarding_message_status, whatsappClientDetail.status) ? (
+            <SendOnboardingButton clientId={whatsappClientDetail.client_id} />
+          ) : null}
+        </div>
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Contact and onboarding</p>
+                    <p className="text-xs text-[var(--muted)]">WhatsApp sender-facing client details</p>
+                  </div>
+                  <Badge variant={whatsappClientDetail.automation_enabled ? "success" : "outline"}>
+                    {whatsappClientDetail.automation_enabled ? "Automation on" : "Automation off"}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">WhatsApp phone</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {whatsappClientDetail.normalized_whatsapp_number ?? whatsappClientDetail.whatsapp_number ?? "Not set"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Onboarding</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {humanizeValue(whatsappClientDetail.onboarding_message_status)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Workout time</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {formatTime12Hour(whatsappClientDetail.workout_time) ?? "Not set"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Meal reminders</p>
+                    <p className="font-medium text-[var(--foreground)]">
+                      {whatsappClientDetail.meal_reminder_times.length > 0
+                        ? whatsappClientDetail.meal_reminder_times.join(", ")
+                        : "Not set"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">Coaching notes</p>
+                  <p className="text-xs text-[var(--muted)]">Goal and diet context saved for this WhatsApp client</p>
+                </div>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Goal</p>
+                    <p className="font-medium leading-6 text-[var(--foreground)]">{whatsappClientDetail.goal ?? "Not set"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Diet notes</p>
+                    <p className="font-medium leading-6 text-[var(--foreground)]">{whatsappClientDetail.diet_notes ?? "Not set"}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <DashboardSection
+            title="Contact Details"
+            description="Edit the WhatsApp-only client record without creating a login account."
+          >
+            <Card>
+              <CardContent>
+                <WhatsAppClientContactEditor client={whatsappClientDetail} />
+              </CardContent>
+            </Card>
+          </DashboardSection>
+
+          <WhatsAppConversation messages={conversation.messages} error={conversation.error} />
+
+          <DashboardSection title="Nutrition and Reports" description="Food logs, media, and reports will appear after this client starts replying on WhatsApp.">
+            <Card>
+              <CardContent className="py-6">
+                <EmptyState
+                  title="No nutrition history yet"
+                  description="This WhatsApp-only client has no saved food logs, photos, voice notes, or reports yet."
+                />
+              </CardContent>
+            </Card>
+          </DashboardSection>
+        </div>
       </PageContainer>
     )
   }
@@ -588,48 +750,6 @@ export default async function ClientDetailPage({
         )}
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.7fr)]">
-          {whatsappClientDetail ? (
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--foreground)]">Contact and onboarding</p>
-                    <p className="text-xs text-[var(--muted)]">WhatsApp-only client details</p>
-                  </div>
-                  <Badge variant={whatsappClientDetail.status === "active" ? "success" : "outline"}>
-                    {humanizeValue(whatsappClientDetail.status)}
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">WhatsApp phone</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {whatsappClientDetail.normalized_whatsapp_number ?? whatsappClientDetail.whatsapp_number ?? "Not set"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Onboarding</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {humanizeValue(whatsappClientDetail.onboarding_message_status)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Automation</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {whatsappClientDetail.automation_enabled ? "Enabled" : "Disabled"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--muted)]">Workout time</p>
-                    <p className="font-medium text-[var(--foreground)]">
-                      {formatTime12Hour(whatsappClientDetail.workout_time) ?? "Not set"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
           <Card>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
@@ -697,19 +817,6 @@ export default async function ClientDetailPage({
 
           <ActivityPreview entries={latestActivityEntries} />
         </div>
-
-        {whatsappClientDetail ? (
-          <DashboardSection
-            title="Contact Details"
-            description="Edit the WhatsApp-only client record without creating a login account."
-          >
-            <Card>
-              <CardContent>
-                <WhatsAppClientContactEditor client={whatsappClientDetail} />
-              </CardContent>
-            </Card>
-          </DashboardSection>
-        ) : null}
 
         <DashboardSection
           title="Onboarding Readiness"
