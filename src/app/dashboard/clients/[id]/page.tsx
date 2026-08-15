@@ -23,7 +23,11 @@ import { getClientMeals, getClientMealsForDay } from "@/lib/meals/mealOperations
 import { mapMealRecordsToTimelineEntries } from "@/lib/meals/mealTimelineMapper"
 import { getTrainerProfile } from "@/lib/operations/trainer"
 import { getClientDetail, getClientWhatsAppConversation, type ClientWhatsAppMessage } from "@/lib/dashboard-reads"
-import { getTrainerWhatsAppClientDetail } from "@/lib/operations/trainer-whatsapp-clients"
+import {
+  getTrainerWhatsAppClientDashboard,
+  getTrainerWhatsAppClientDetail,
+  type TrainerWhatsAppClientMeal,
+} from "@/lib/operations/trainer-whatsapp-clients"
 import type { ClientSummary } from "@/types/dashboard"
 import type { MealRecord } from "@/types/meal"
 import type { TimelineEntry } from "@/types/timeline"
@@ -199,6 +203,20 @@ function sumMeals(meals: MealRecord[]) {
     { calories: 0, protein: 0, carbs: 0, fat: 0 },
   )
 }
+
+function sumWhatsAppMeals(meals: TrainerWhatsAppClientMeal[]) {
+  return meals.reduce(
+    (acc, meal) => ({
+      calories: acc.calories + (meal.calories ?? 0),
+      protein: acc.protein + (meal.protein_g ?? 0),
+      carbs: acc.carbs + (meal.carbs_g ?? 0),
+      fat: acc.fat + (meal.fat_g ?? 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  )
+}
+
+const TARGETS = { calories: 2200, protein: 160, carbs: 220, fat: 70 }
 
 function formatGoalType(value: unknown): string {
   if (typeof value !== "string" || !value) return "No active goal"
@@ -497,6 +515,30 @@ export default async function ClientDetailPage({
 
   if (whatsappClientDetail) {
     const conversation = await getWhatsAppConversationWithTimeout(id, authUserId)
+    const whatsappDashboard = await getTrainerWhatsAppClientDashboard(authUserId, id)
+    const selectedDayWhatsAppMeals = whatsappDashboard.meals.filter((meal) => meal.logged_at.slice(0, 10) === selectedDateKey)
+    const selectedDayMacros = sumWhatsAppMeals(selectedDayWhatsAppMeals)
+    const totalReports = whatsappDashboard.weeklyReportsCount + whatsappDashboard.monthlyReportsCount
+    const recentActivity = [
+      ...whatsappDashboard.meals.map((meal) => ({
+        id: `meal-${meal.id}`,
+        at: meal.logged_at,
+        title: "Food log saved",
+        description: meal.notes ?? "Meal details saved from WhatsApp activity.",
+      })),
+      ...whatsappDashboard.media.map((item) => ({
+        id: `media-${item.id}`,
+        at: item.message_timestamp,
+        title: `${humanizeValue(item.message_type)} received`,
+        description: item.caption ?? (item.has_media_url ? "Media reference saved." : "Media metadata saved."),
+      })),
+      ...whatsappDashboard.voiceNotes.map((note) => ({
+        id: `voice-${note.id}`,
+        at: note.created_at,
+        title: "Voice note processed",
+        description: note.transcript ?? humanizeValue(note.processing_status, "Voice note metadata saved."),
+      })),
+    ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6)
 
     return (
       <PageContainer>
@@ -535,7 +577,7 @@ export default async function ClientDetailPage({
               </Badge>
             </div>
             <p className="text-sm text-[var(--muted)] mt-1">
-              WhatsApp-only client record. Clients do not log in to NutriRelay.
+              {selectedDayWhatsAppMeals.length} intake event{selectedDayWhatsAppMeals.length !== 1 ? "s" : ""} on {formatDate(selectedDate)} · {formatNumber(Math.round(selectedDayMacros.calories))} kcal logged
             </p>
           </div>
           {canSendWhatsAppOnlyOnboarding(whatsappClientDetail.onboarding_message_status, whatsappClientDetail.status) ? (
@@ -544,6 +586,96 @@ export default async function ClientDetailPage({
         </div>
 
         <div className="space-y-6">
+          {whatsappDashboard.pendingReviewCount > 0 ? (
+            <InlineNotice variant="warning">
+              {whatsappDashboard.pendingReviewCount} WhatsApp item{whatsappDashboard.pendingReviewCount !== 1 ? "s" : ""} may need trainer review.
+            </InlineNotice>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.7fr)]">
+            <Card>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--surface-overlay)]">
+                    <CalendarClock size={16} className="text-[var(--foreground)]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Client status</p>
+                    <p className="text-xs text-[var(--muted)]">WhatsApp-only client record</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Status</p>
+                    <p className="font-medium text-[var(--foreground)]">{humanizeValue(whatsappClientDetail.status)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Onboarding</p>
+                    <p className="font-medium text-[var(--foreground)]">{humanizeValue(whatsappClientDetail.onboarding_message_status)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Automation</p>
+                    <p className="font-medium text-[var(--foreground)]">{whatsappClientDetail.automation_enabled ? "Enabled" : "Disabled"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Phone edit</p>
+                    <p className="font-medium text-[var(--foreground)]">{whatsappClientDetail.phone_edit_locked ? "Locked" : "Available"}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--info)]/10">
+                    <Goal size={16} className="text-[var(--info)]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Goal summary</p>
+                    <p className="text-xs text-[var(--muted)]">Trainer notes used for coaching prompts</p>
+                  </div>
+                </div>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Goal</p>
+                    <p className="font-medium leading-6 text-[var(--foreground)]">{whatsappClientDetail.goal ?? "Not set"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Diet notes</p>
+                    <p className="font-medium leading-6 text-[var(--foreground)]">{whatsappClientDetail.diet_notes ?? "Not set"}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface-overlay)]">
+                    <History size={15} className="text-[var(--foreground)]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Latest activity</p>
+                    <p className="text-xs text-[var(--muted)]">Last WhatsApp updates</p>
+                  </div>
+                </div>
+                {recentActivity.length > 0 ? (
+                  <div className="space-y-2">
+                    {recentActivity.slice(0, 2).map((entry) => (
+                      <div key={entry.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-2">
+                        <p className="text-sm font-medium text-[var(--foreground)]">{entry.title}</p>
+                        <p className="mt-0.5 line-clamp-1 text-xs text-[var(--muted)]">{entry.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[var(--muted)]">No WhatsApp activity yet.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardContent className="space-y-4">
@@ -618,15 +750,263 @@ export default async function ClientDetailPage({
             </Card>
           </DashboardSection>
 
+          <DashboardSection
+            title="Onboarding Readiness"
+            description="WhatsApp-only setup fields used before normal food logging and reminders."
+          >
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <Card>
+                <CardContent className="space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--foreground)]">Contact state</p>
+                      <p className="text-xs text-[var(--muted)]">Client identity stays WhatsApp-only</p>
+                    </div>
+                    <Badge variant={whatsappClientDetail.status === "active" ? "success" : "outline"}>
+                      {humanizeValue(whatsappClientDetail.status)}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">WhatsApp phone</p>
+                      <p className="font-medium text-[var(--foreground)]">
+                        {whatsappClientDetail.normalized_whatsapp_number ?? whatsappClientDetail.whatsapp_number ?? "Not set"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Phone edit rule</p>
+                      <p className="font-medium leading-6 text-[var(--foreground)]">
+                        {whatsappClientDetail.phone_edit_locked
+                          ? whatsappClientDetail.phone_edit_lock_reason ?? "Locked after onboarding or activity."
+                          : "Editable until onboarding or client activity starts."}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Reminder routine</p>
+                    <p className="text-xs text-[var(--muted)]">Times used by automation and reports</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Meal reminders</p>
+                      <p className="font-medium text-[var(--foreground)]">
+                        {whatsappClientDetail.meal_reminder_times.length > 0
+                          ? whatsappClientDetail.meal_reminder_times.join(", ")
+                          : "Not set"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Workout time</p>
+                      <p className="font-medium text-[var(--foreground)]">
+                        {formatTime12Hour(whatsappClientDetail.workout_time) ?? "Not set"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Automation</p>
+                      <p className="font-medium text-[var(--foreground)]">
+                        {whatsappClientDetail.automation_enabled ? "Enabled" : "Disabled"}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">Data readiness</p>
+                    <p className="text-xs text-[var(--muted)]">What has arrived from WhatsApp so far</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Messages</p>
+                      <p className="font-medium text-[var(--foreground)] tabular-nums">{whatsappDashboard.communicationCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Food logs</p>
+                      <p className="font-medium text-[var(--foreground)] tabular-nums">{whatsappDashboard.meals.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Media</p>
+                      <p className="font-medium text-[var(--foreground)] tabular-nums">{whatsappDashboard.media.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Reports</p>
+                      <p className="font-medium text-[var(--foreground)] tabular-nums">{totalReports}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </DashboardSection>
+
+          <Card>
+            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">Daily review</p>
+                <p className="text-xs text-[var(--muted)]">
+                  Showing WhatsApp intake, media, and timeline for {formatDate(selectedDate)}
+                </p>
+              </div>
+              <DailyReviewNav
+                clientId={id}
+                selectedDateKey={selectedDateKey}
+                previousDateKey={previousDateKey}
+                nextDateKey={nextDateKey}
+                todayDateKey={todayDateKey}
+              />
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
+            <DashboardSection title="Daily Macros" description={`${selectedDayWhatsAppMeals.length} logged intake event${selectedDayWhatsAppMeals.length !== 1 ? "s" : ""} for ${formatDate(selectedDate)}`}>
+              <Card>
+                <CardContent className="space-y-4">
+                  <MacroBar label="Calories (kcal)" current={selectedDayMacros.calories} target={TARGETS.calories} color="#22c55e" />
+                  <MacroBar label="Protein (g)" current={selectedDayMacros.protein} target={TARGETS.protein} color="#38bdf8" />
+                  <MacroBar label="Carbohydrates (g)" current={selectedDayMacros.carbs} target={TARGETS.carbs} color="#f59e0b" />
+                  <MacroBar label="Fat (g)" current={selectedDayMacros.fat} target={TARGETS.fat} color="#f472b6" />
+                </CardContent>
+              </Card>
+            </DashboardSection>
+
+            <DashboardSection title="Client Photos and Media" description={`Inbound WhatsApp media for ${formatDate(selectedDate)}`}>
+              {whatsappDashboard.media.length > 0 ? (
+                <div className="space-y-3">
+                  {whatsappDashboard.media.slice(0, 6).map((item) => (
+                    <Card key={item.id}>
+                      <CardContent className="space-y-2 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="info">{formatMediaKind(item.media_kind)}</Badge>
+                          <Badge variant="outline">{humanizeValue(item.message_type)}</Badge>
+                        </div>
+                        <p className="text-xs text-[var(--muted)]">{formatDateTime(item.message_timestamp)}</p>
+                        <p className="line-clamp-2 text-sm text-[var(--foreground)]">
+                          {item.caption ?? (item.has_media_url ? "Media reference saved." : "Media metadata saved.")}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-6">
+                    <EmptyState title="No media yet" description="Photos, voice media, and documents will appear after this client sends them on WhatsApp." />
+                  </CardContent>
+                </Card>
+              )}
+            </DashboardSection>
+          </div>
+
+          <DashboardSection title="Latest Logged Intake" description="Food logs created from WhatsApp replies and media analysis.">
+            {whatsappDashboard.meals.length > 0 ? (
+              <Card>
+                <CardContent className="space-y-3">
+                  {whatsappDashboard.meals.slice(0, 8).map((meal) => (
+                    <div key={meal.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-[var(--foreground)]">{meal.notes ?? "Food log"}</p>
+                        <span className="text-xs text-[var(--muted)]">{formatDateTime(meal.logged_at)}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        <Badge variant="outline">{formatNumber(meal.calories ?? 0)} kcal</Badge>
+                        <Badge variant="outline">P {formatNumber(meal.protein_g ?? 0)}g</Badge>
+                        <Badge variant="outline">C {formatNumber(meal.carbs_g ?? 0)}g</Badge>
+                        <Badge variant="outline">F {formatNumber(meal.fat_g ?? 0)}g</Badge>
+                        <Badge variant={statusVariant(meal.review_state ?? meal.verification_status ?? "unknown")}>
+                          {humanizeValue(meal.review_state ?? meal.verification_status ?? "Review unknown")}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-6">
+                  <EmptyState title="No food logs yet" description="Meals will appear after this client replies on WhatsApp or sends food media." />
+                </CardContent>
+              </Card>
+            )}
+          </DashboardSection>
+
+          <DashboardSection title="Voice Notes" description="Voice-note transcripts and processing state from WhatsApp.">
+            {whatsappDashboard.voiceNotes.length > 0 ? (
+              <Card>
+                <CardContent className="space-y-3">
+                  {whatsappDashboard.voiceNotes.slice(0, 6).map((note) => (
+                    <div key={note.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <Badge variant={statusVariant(note.processing_status ?? "unknown")}>
+                          {humanizeValue(note.processing_status ?? "Processing state unknown")}
+                        </Badge>
+                        <span className="text-xs text-[var(--muted)]">{formatDateTime(note.created_at)}</span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-[var(--foreground)]">
+                        {note.transcript ?? "No transcript saved yet."}
+                      </p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-6">
+                  <EmptyState title="No voice notes yet" description="Voice notes and transcripts will appear after this client sends audio on WhatsApp." />
+                </CardContent>
+              </Card>
+            )}
+          </DashboardSection>
+
           <WhatsAppConversation messages={conversation.messages} error={conversation.error} />
 
-          <DashboardSection title="Nutrition and Reports" description="Food logs, media, and reports will appear after this client starts replying on WhatsApp.">
+          <DashboardSection title="Reports" description="Weekly and monthly reports generated for this WhatsApp-only client.">
             <Card>
-              <CardContent className="py-6">
-                <EmptyState
-                  title="No nutrition history yet"
-                  description="This WhatsApp-only client has no saved food logs, photos, voice notes, or reports yet."
-                />
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-4 py-3">
+                    <p className="text-xs text-[var(--muted)]">Weekly reports</p>
+                    <p className="mt-1 text-xl font-semibold text-[var(--foreground)] tabular-nums">{whatsappDashboard.weeklyReportsCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-4 py-3">
+                    <p className="text-xs text-[var(--muted)]">Monthly reports</p>
+                    <p className="mt-1 text-xl font-semibold text-[var(--foreground)] tabular-nums">{whatsappDashboard.monthlyReportsCount}</p>
+                  </div>
+                </div>
+                {totalReports === 0 ? (
+                  <EmptyState
+                    title="No reports yet"
+                    description="Reports will appear after WhatsApp activity creates enough nutrition history."
+                  />
+                ) : null}
+              </CardContent>
+            </Card>
+          </DashboardSection>
+
+          <DashboardSection title="Client Timeline" description={`WhatsApp-only activity for ${formatDate(selectedDate)}`}>
+            <Card>
+              <CardContent className="space-y-3">
+                {recentActivity.length > 0 ? (
+                  recentActivity.map((entry) => (
+                    <div key={entry.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-[var(--foreground)]">{entry.title}</p>
+                        <span className="text-xs text-[var(--muted)]">{formatDateTime(entry.at)}</span>
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{entry.description}</p>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState
+                    title="No timeline activity yet"
+                    description="WhatsApp replies, food logs, media, and reports will populate this timeline."
+                  />
+                )}
               </CardContent>
             </Card>
           </DashboardSection>
@@ -637,8 +1017,6 @@ export default async function ClientDetailPage({
 
   const riskLevel = getClientRiskLevel(client)
   const compliance = getComplianceState(dto.metrics)
-
-  const TARGETS = { calories: 2200, protein: 160, carbs: 220, fat: 70 }
 
   const events = await getClientEvents(id)
   const eventEntries = mapEngagementEvents(events, id)

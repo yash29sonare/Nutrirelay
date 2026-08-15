@@ -37,6 +37,46 @@ export interface TrainerWhatsAppClientDetail {
   phone_edit_lock_reason: string | null
 }
 
+export interface TrainerWhatsAppClientMeal {
+  id: string
+  logged_at: string
+  notes: string | null
+  calories: number | null
+  protein_g: number | null
+  carbs_g: number | null
+  fat_g: number | null
+  review_state: string | null
+  verification_status: string | null
+}
+
+export interface TrainerWhatsAppClientMedia {
+  id: string
+  message_timestamp: string
+  message_type: string
+  media_kind: string | null
+  caption: string | null
+  has_media_url: boolean
+}
+
+export interface TrainerWhatsAppClientVoiceNote {
+  id: string
+  created_at: string
+  processing_status: string | null
+  transcript: string | null
+}
+
+export interface TrainerWhatsAppClientDashboard {
+  meals: TrainerWhatsAppClientMeal[]
+  todaysMeals: TrainerWhatsAppClientMeal[]
+  media: TrainerWhatsAppClientMedia[]
+  voiceNotes: TrainerWhatsAppClientVoiceNote[]
+  weeklyReportsCount: number
+  monthlyReportsCount: number
+  communicationCount: number
+  pendingReviewCount: number
+  lastActivityAt: string | null
+}
+
 export interface AddTrainerWhatsAppClientInput {
   authUserId: string
   clientName: string
@@ -102,6 +142,29 @@ function normalizeReminderTimes(values: unknown): string[] {
   return values
     .map((value) => (typeof value === "string" ? value.trim() : ""))
     .filter(Boolean)
+}
+
+function numericValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function metadataText(metadata: Record<string, unknown> | null, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = metadata?.[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function metadataHasMediaUrl(metadata: Record<string, unknown> | null): boolean {
+  return Boolean(metadataText(metadata, ["media_url", "storage_path", "image_path", "audio_url"]))
+}
+
+function isPendingReviewStatus(value: string | null): boolean {
+  if (!value) return false
+  return ["needs_review", "review_needed", "pending", "failed", "error", "unverified"].includes(value.toLowerCase())
 }
 
 function isEditableStatus(value: string): value is "active" | "inactive" {
@@ -276,6 +339,170 @@ export async function getTrainerWhatsAppClientDetail(
     updated_at: row.updated_at,
     phone_edit_locked: phoneLock.locked,
     phone_edit_lock_reason: phoneLock.reason,
+  }
+}
+
+export async function getTrainerWhatsAppClientDashboard(
+  authUserId: string,
+  clientId: string,
+): Promise<TrainerWhatsAppClientDashboard> {
+  const emptyDashboard: TrainerWhatsAppClientDashboard = {
+    meals: [],
+    todaysMeals: [],
+    media: [],
+    voiceNotes: [],
+    weeklyReportsCount: 0,
+    monthlyReportsCount: 0,
+    communicationCount: 0,
+    pendingReviewCount: 0,
+    lastActivityAt: null,
+  }
+
+  const db = getWhatsAppServiceDb()
+  const { data: ownedClient, error: ownedClientError } = await db
+    .from("trainer_whatsapp_clients")
+    .select("client_id")
+    .eq("trainer_id", authUserId)
+    .eq("client_id", clientId)
+    .neq("status", "archived")
+    .maybeSingle()
+
+  if (ownedClientError) {
+    throw new Error(`Failed to verify WhatsApp client access: ${ownedClientError.message}`)
+  }
+
+  if (!ownedClient) {
+    return emptyDashboard
+  }
+
+  const [
+    mealsResult,
+    mediaResult,
+    voiceNotesResult,
+    weeklyReportsResult,
+    monthlyReportsResult,
+    communicationsCountResult,
+  ] = await Promise.allSettled([
+    db
+      .from("food_logs")
+      .select("id, logged_at, notes, calories, protein_g, carbs_g, fat_g, review_state, verification_status")
+      .eq("trainer_id", authUserId)
+      .eq("whatsapp_client_id", clientId)
+      .order("logged_at", { ascending: false })
+      .limit(40),
+    db
+      .from("communication_logs")
+      .select("id, message_timestamp, message_type, metadata")
+      .eq("trainer_id", authUserId)
+      .eq("whatsapp_client_id", clientId)
+      .in("message_type", ["IMAGE", "AUDIO", "VOICE", "VIDEO", "DOCUMENT", "MEDIA"])
+      .order("message_timestamp", { ascending: false })
+      .limit(30),
+    db
+      .from("voice_notes")
+      .select("id, created_at, processing_status, transcript")
+      .eq("whatsapp_client_id", clientId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    db
+      .from("weekly_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("trainer_id", authUserId)
+      .eq("whatsapp_client_id", clientId),
+    db
+      .from("monthly_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("trainer_id", authUserId)
+      .eq("whatsapp_client_id", clientId),
+    db
+      .from("communication_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("trainer_id", authUserId)
+      .eq("whatsapp_client_id", clientId),
+  ])
+
+  const meals = mealsResult.status === "fulfilled" && !mealsResult.value.error
+    ? ((mealsResult.value.data ?? []) as Array<{
+        id: string
+        logged_at: string
+        notes: string | null
+        calories: unknown
+        protein_g: unknown
+        carbs_g: unknown
+        fat_g: unknown
+        review_state: string | null
+        verification_status: string | null
+      }>).map((meal) => ({
+        id: meal.id,
+        logged_at: meal.logged_at,
+        notes: meal.notes,
+        calories: numericValue(meal.calories),
+        protein_g: numericValue(meal.protein_g),
+        carbs_g: numericValue(meal.carbs_g),
+        fat_g: numericValue(meal.fat_g),
+        review_state: meal.review_state,
+        verification_status: meal.verification_status,
+      }))
+    : []
+
+  const media = mediaResult.status === "fulfilled" && !mediaResult.value.error
+    ? ((mediaResult.value.data ?? []) as Array<{
+        id: string
+        message_timestamp: string
+        message_type: string
+        metadata: Record<string, unknown> | null
+      }>).map((message) => ({
+        id: message.id,
+        message_timestamp: message.message_timestamp,
+        message_type: message.message_type,
+        media_kind: metadataText(message.metadata, ["media_kind", "classification", "kind"]),
+        caption: metadataText(message.metadata, ["caption", "text", "transcript"]),
+        has_media_url: metadataHasMediaUrl(message.metadata),
+      }))
+    : []
+
+  const voiceNotes = voiceNotesResult.status === "fulfilled" && !voiceNotesResult.value.error
+    ? ((voiceNotesResult.value.data ?? []) as Array<{
+        id: string
+        created_at: string
+        processing_status: string | null
+        transcript: string | null
+      }>).map((note) => ({
+        id: note.id,
+        created_at: note.created_at,
+        processing_status: note.processing_status,
+        transcript: note.transcript,
+      }))
+    : []
+
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const todaysMeals = meals.filter((meal) => meal.logged_at.slice(0, 10) === todayKey)
+  const pendingReviewCount = meals.filter(
+    (meal) => isPendingReviewStatus(meal.review_state) || isPendingReviewStatus(meal.verification_status),
+  ).length + voiceNotes.filter((note) => isPendingReviewStatus(note.processing_status)).length
+
+  const timestamps = [
+    ...meals.map((meal) => meal.logged_at),
+    ...media.map((item) => item.message_timestamp),
+    ...voiceNotes.map((note) => note.created_at),
+  ].filter(Boolean)
+
+  return {
+    meals,
+    todaysMeals,
+    media,
+    voiceNotes,
+    weeklyReportsCount: weeklyReportsResult.status === "fulfilled" && !weeklyReportsResult.value.error
+      ? weeklyReportsResult.value.count ?? 0
+      : 0,
+    monthlyReportsCount: monthlyReportsResult.status === "fulfilled" && !monthlyReportsResult.value.error
+      ? monthlyReportsResult.value.count ?? 0
+      : 0,
+    communicationCount: communicationsCountResult.status === "fulfilled" && !communicationsCountResult.value.error
+      ? communicationsCountResult.value.count ?? 0
+      : 0,
+    pendingReviewCount,
+    lastActivityAt: timestamps.sort((a, b) => b.localeCompare(a))[0] ?? null,
   }
 }
 
