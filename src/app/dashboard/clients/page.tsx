@@ -6,10 +6,14 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { Users, AlertTriangle, MessageSquare } from "lucide-react"
 import { ClientFilters } from "./ClientFilters"
-import { AddWhatsAppClientDialog } from "./AddWhatsAppClientDialog"
+import { AddWhatsAppClientDialog, SendOnboardingButton } from "./AddWhatsAppClientDialog"
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getClientList } from "@/lib/operations/clients"
-import { getTrainerWhatsAppClientCount, listTrainerWhatsAppClients, type TrainerWhatsAppClientRow } from "@/lib/operations/trainer-whatsapp-clients"
+import {
+  getTrainerWhatsAppClientCount,
+  listTrainerWhatsAppClients,
+  type TrainerWhatsAppClientRow,
+} from "@/lib/operations/trainer-whatsapp-clients"
 import { getClientRiskLevel } from "@/lib/domain/dashboardSemantics"
 import { createClient } from "@/utils/supabase/server"
 import { getWhatsAppServiceDb } from "@/lib/whatsapp/service-db"
@@ -68,6 +72,26 @@ function getOnboardingBadge(status: string) {
     default:
       return <Badge variant="default">Onboarding not sent</Badge>
   }
+}
+
+function getWhatsAppStatusBadge(status: string) {
+  switch (status) {
+    case "active":
+      return <Badge variant="success">Active</Badge>
+    case "inactive":
+      return <Badge variant="outline">Inactive</Badge>
+    case "archived":
+      return <Badge variant="warning">Archived</Badge>
+    default:
+      return <Badge variant="outline">{status}</Badge>
+  }
+}
+
+function canSendOnboarding(client: TrainerWhatsAppClientRow): boolean {
+  return (
+    client.status === "active" &&
+    (client.onboarding_message_status === "not_sent" || client.onboarding_message_status === "failed")
+  )
 }
 
 function getWhatsAppClientList(
@@ -310,25 +334,34 @@ export default async function ClientsPage({
                   key={`whatsapp-${row.client.client_id}`}
                   className="flex items-center gap-3 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-card)] px-5 py-3"
                 >
-                  <Avatar
-                    fallback={getInitials(row.client.client_name)}
-                    size="md"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-[var(--foreground)]">
-                      {row.client.client_name}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--muted)]">
-                      {row.client.whatsapp_number ?? "WhatsApp number saved"}
-                      &nbsp;·&nbsp;{row.client.status}
-                    </p>
-                    {row.client.onboarding_failure_reason ? (
-                      <p className="mt-1 text-xs text-[var(--muted)]">
-                        {row.client.onboarding_failure_reason}
+                  <Link
+                    href={`/dashboard/clients/${row.client.client_id}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg transition-colors hover:bg-[var(--surface-overlay)]"
+                  >
+                    <Avatar
+                      fallback={getInitials(row.client.client_name)}
+                      size="md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                        {row.client.client_name}
                       </p>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        {getWhatsAppStatusBadge(row.client.status)}
+                      </div>
+                      {row.client.onboarding_failure_reason ? (
+                        <p className="mt-1 text-xs text-[var(--muted)]">
+                          {row.client.onboarding_failure_reason}
+                        </p>
+                      ) : null}
+                    </div>
+                  </Link>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    {getOnboardingBadge(row.client.onboarding_message_status)}
+                    {canSendOnboarding(row.client) ? (
+                      <SendOnboardingButton clientId={row.client.client_id} />
                     ) : null}
                   </div>
-                  {getOnboardingBadge(row.client.onboarding_message_status)}
                 </div>
               )
             ))}

@@ -34,6 +34,7 @@ export interface ClientDetail {
   client_id: string
   full_name: string | null
   phone_number: string | null
+  client_kind?: "legacy" | "whatsapp"
   onboarding: {
     status: string
     current_step: string
@@ -460,7 +461,63 @@ export async function getClientDetail(clientId: string, trainerId: string): Prom
     .limit(1)
     .maybeSingle()
 
-  if (!tc) return null
+  if (!tc) {
+    const { data: whatsappClient } = await db
+      .from("trainer_whatsapp_clients")
+      .select("client_id, client_name, whatsapp_number, normalized_whatsapp_number, onboarding_message_status, goal, diet_notes, meal_reminder_times, workout_time, automation_enabled, status")
+      .eq("client_id", clientId)
+      .eq("trainer_id", trainerId)
+      .neq("status", "archived")
+      .limit(1)
+      .maybeSingle()
+
+    const row = whatsappClient as {
+      client_id: string
+      client_name: string | null
+      whatsapp_number: string | null
+      normalized_whatsapp_number: string | null
+      onboarding_message_status: string | null
+      goal: string | null
+      diet_notes: string | null
+      meal_reminder_times: unknown
+      workout_time: string | null
+      automation_enabled: boolean | null
+      status: string | null
+    } | null
+
+    if (!row) return null
+
+    const mealReminderTimes = Array.isArray(row.meal_reminder_times)
+      ? row.meal_reminder_times.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+      : []
+
+    return {
+      client_id: row.client_id,
+      full_name: row.client_name ?? "Client",
+      phone_number: row.normalized_whatsapp_number ?? row.whatsapp_number,
+      client_kind: "whatsapp",
+      onboarding: {
+        status: row.onboarding_message_status ?? "not_sent",
+        current_step: row.onboarding_message_status ?? "not_sent",
+        missing_fields: [],
+        last_question_sent_at: null,
+        last_answer_received_at: null,
+        skipped_meals: [],
+      },
+      goal: row.goal ? { goal_type: row.goal, notes: row.goal, goal_status: "ACTIVE" } : null,
+      health: null,
+      preferences: row.diet_notes ? { notes: row.diet_notes } : null,
+      workout: {
+        meal_reminder_times: mealReminderTimes,
+        workout_time: row.workout_time,
+        automation_enabled: row.automation_enabled ?? false,
+        client_status: row.status ?? "active",
+      },
+      compliance: null,
+      media: [],
+      latestStructuredResponse: null,
+    }
+  }
 
   const [profileRes, onboardingRes, goalRes, healthRes, prefRes, workoutRes, complianceRes, mediaRes, structuredResponseRes] = await Promise.all([
     db.from("profiles").select("full_name, phone_number").eq("id", clientId).single(),
@@ -516,6 +573,7 @@ export async function getClientDetail(clientId: string, trainerId: string): Prom
     client_id: clientId,
     full_name: profile?.full_name ?? null,
     phone_number: profile?.phone_number ?? null,
+    client_kind: "legacy",
     onboarding: onboarding ? {
       status: typeof onboarding.onboarding_status === "string" ? onboarding.onboarding_status : "not_started",
       current_step: typeof onboarding.current_step === "string" ? onboarding.current_step : "height",
@@ -592,13 +650,30 @@ export async function getClientWhatsAppConversation(
     .limit(1)
     .maybeSingle()
 
-  if (!tc) return []
+  const isLegacyClient = Boolean(tc)
+  if (!isLegacyClient) {
+    const { data: whatsappClient } = await db
+      .from("trainer_whatsapp_clients")
+      .select("client_id")
+      .eq("client_id", clientId)
+      .eq("trainer_id", trainerId)
+      .neq("status", "archived")
+      .limit(1)
+      .maybeSingle()
 
-  const { data: communications, error: communicationsError } = await db
+    if (!whatsappClient) return []
+  }
+
+  let communicationQuery = db
     .from("communication_logs")
     .select("id, direction, message_type, wam_id, message_timestamp, delivery_status, metadata, created_at")
     .eq("trainer_id", trainerId)
-    .eq("client_id", clientId)
+
+  communicationQuery = isLegacyClient
+    ? communicationQuery.eq("client_id", clientId)
+    : communicationQuery.eq("whatsapp_client_id", clientId)
+
+  const { data: communications, error: communicationsError } = await communicationQuery
     .order("message_timestamp", { ascending: false })
     .limit(limit)
 
@@ -626,12 +701,16 @@ export async function getClientWhatsAppConversation(
           .eq("trainer_id", trainerId)
           .in("wam_id", wamIds)
           .order("meta_status_timestamp", { ascending: true, nullsFirst: false }),
-        db
+        (() => {
+          let foodQuery = db
           .from("food_logs")
           .select("id, wam_id, notes, calories, protein_g, carbs_g, fat_g, review_state")
           .eq("trainer_id", trainerId)
-          .eq("client_id", clientId)
-          .in("wam_id", wamIds),
+          foodQuery = isLegacyClient
+            ? foodQuery.eq("client_id", clientId)
+            : foodQuery.eq("whatsapp_client_id", clientId)
+          return foodQuery.in("wam_id", wamIds)
+        })(),
       ])
     : [{ data: [] }, { data: [] }]
 

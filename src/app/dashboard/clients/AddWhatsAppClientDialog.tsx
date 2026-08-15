@@ -2,13 +2,13 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Send } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { Dialog } from "@/components/ui/Dialog"
 import { Input } from "@/components/ui/Input"
 import { Textarea } from "@/components/ui/Textarea"
 import { InlineNotice } from "@/components/ui/InlineNotice"
-import { addWhatsAppClientAction, type AddWhatsAppClientActionState } from "./actions"
+import { addWhatsAppClientAction, sendClientOnboardingAction, type AddWhatsAppClientActionState } from "./actions"
 
 const INITIAL_STATE: AddWhatsAppClientActionState = {
   ok: false,
@@ -94,5 +94,39 @@ export function AddWhatsAppClientDialog() {
         </form>
       </Dialog>
     </>
+  )
+}
+
+export function SendOnboardingButton({ clientId }: { clientId: string }) {
+  const router = useRouter()
+  const [state, setState] = useState<AddWhatsAppClientActionState>(INITIAL_STATE)
+  const [pending, startTransition] = useTransition()
+
+  function handleSend() {
+    startTransition(async () => {
+      const result = await sendClientOnboardingAction(clientId)
+      setState(result)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        icon={<Send size={13} aria-hidden="true" />}
+        loading={pending}
+        onClick={handleSend}
+      >
+        Send onboarding
+      </Button>
+      {state.message ? (
+        <p className={`max-w-56 text-right text-xs ${state.ok ? "text-emerald-400" : "text-red-300"}`}>
+          {state.message}
+        </p>
+      ) : null}
+    </div>
   )
 }
