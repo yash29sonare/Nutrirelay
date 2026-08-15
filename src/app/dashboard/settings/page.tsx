@@ -136,17 +136,28 @@ export default async function SettingsPage() {
   const authUserId = user?.id ?? null
 
   let profile: Record<string, unknown> | null = null
+  let accountProfile: Record<string, unknown> | null = null
   const readiness = authUserId ? await getManualWabaOnboardingReadiness(authUserId) : null
   if (authUserId) {
-    const { data } = await supabase
+    const { data: trainerData } = await supabase
       .from("trainers")
       .select("*")
       .eq("auth_user_id", authUserId)
       .maybeSingle()
-    profile = data as Record<string, unknown> | null
+    profile = trainerData as Record<string, unknown> | null
+
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", authUserId)
+      .maybeSingle()
+    accountProfile = profileData as Record<string, unknown> | null
   }
 
-  const displayName = (user?.user_metadata?.display_name as string) ?? (profile?.name as string) ?? "Trainer"
+  const displayName =
+    (profile?.name as string | null)?.trim()
+    || (accountProfile?.full_name as string | null)?.trim()
+    || "Trainer"
   const businessName = (profile?.business_name as string) ?? null
   const email = user?.email ?? (profile?.email as string) ?? ""
   const subscriptionPlan = (profile?.subscription_plan as string) ?? "STARTER"

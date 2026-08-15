@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/Card";
-import { CheckCircle, Dumbbell } from "lucide-react";
+import { CheckCircle, Clock, MessageSquare, UserRound } from "lucide-react";
 import type { OnboardingData } from "../onboarding-types";
 
 interface StepCompleteProps {
@@ -29,30 +29,38 @@ export function StepComplete({ data }: StepCompleteProps) {
       </div>
 
       <h1 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)] tracking-tight">
-        You&apos;re All Set!
+        Your workspace is ready
       </h1>
       <p className="text-sm text-[var(--muted)] mt-2 max-w-md">
-        Welcome aboard{data.displayName ? `, ${data.displayName}` : ""}. Your NutriRelay
-        workspace is ready.
+        Welcome aboard{data.displayName ? `, ${data.displayName}` : ""}. Next, connect your WhatsApp coaching number from Settings.
       </p>
 
       <Card className="mt-8 w-full max-w-sm text-left">
         <CardContent className="py-4 space-y-3">
           <div className="flex items-center gap-3">
-            <Dumbbell size={15} className="text-brand-500 shrink-0" />
+            <UserRound size={15} className="text-brand-500 shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs text-[var(--muted)]">Business</p>
+              <p className="text-xs text-[var(--muted)]">Trainer display name</p>
               <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                {data.businessName}
+                {data.displayName || "Trainer"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <CheckCircle size={15} className="text-brand-500 shrink-0" />
+            <MessageSquare size={15} className="text-brand-500 shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs text-[var(--muted)]">Country</p>
+              <p className="text-xs text-[var(--muted)]">Coaching brand</p>
               <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                {data.country || "Not specified"}
+                {data.businessName || "Not set"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Clock size={15} className="text-brand-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs text-[var(--muted)]">Timezone</p>
+              <p className="text-sm font-medium text-[var(--foreground)] truncate">
+                {data.timezone || "Asia/Kolkata"}
               </p>
             </div>
           </div>

@@ -24,8 +24,8 @@ export function useOnboardingForm() {
       fullName: "",
       displayName: "",
       businessName: "",
-      timezone: undefined,
-      country: undefined,
+      timezone: "Asia/Kolkata",
+      country: "IN",
     },
     mode: "onTouched",
   });
@@ -51,7 +51,7 @@ export function useOnboardingForm() {
         displayName: data.displayName,
         businessName: data.businessName,
         timezone: data.timezone,
-        country: data.country,
+        country: data.country ?? "IN",
       });
       setSubmitting(false);
       if (result.error) {

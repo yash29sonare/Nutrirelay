@@ -47,7 +47,7 @@ export default function OnboardingPage() {
 
       {/* Content */}
       <div className="flex-1 flex items-start justify-center px-4 py-8 sm:py-12">
-        <div className="w-full max-w-lg">
+        <div className={isWelcomeStep ? "w-full max-w-5xl" : "w-full max-w-xl"}>
           <FormProvider {...form}>
             {isWelcomeStep ? (
               <StepWelcome onContinue={goToNextStep} />

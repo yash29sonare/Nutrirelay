@@ -7,6 +7,7 @@ import { FormSection } from "@/components/ui/FormSection";
 import type { OnboardingData } from "../onboarding-types";
 
 const timezoneOptions = [
+  { value: "Asia/Kolkata", label: "India (IST)" },
   { value: "America/New_York", label: "Eastern Time (US/Canada)" },
   { value: "America/Chicago", label: "Central Time (US/Canada)" },
   { value: "America/Denver", label: "Mountain Time (US/Canada)" },
@@ -15,24 +16,9 @@ const timezoneOptions = [
   { value: "Europe/Paris", label: "Paris (CET)" },
   { value: "Europe/Berlin", label: "Berlin (CET)" },
   { value: "Asia/Dubai", label: "Dubai (GST)" },
-  { value: "Asia/Kolkata", label: "India (IST)" },
   { value: "Asia/Singapore", label: "Singapore (SGT)" },
   { value: "Asia/Tokyo", label: "Tokyo (JST)" },
   { value: "Australia/Sydney", label: "Sydney (AEST)" },
-];
-
-const countryOptions = [
-  { value: "US", label: "United States" },
-  { value: "CA", label: "Canada" },
-  { value: "UK", label: "United Kingdom" },
-  { value: "DE", label: "Germany" },
-  { value: "FR", label: "France" },
-  { value: "AU", label: "Australia" },
-  { value: "IN", label: "India" },
-  { value: "AE", label: "United Arab Emirates" },
-  { value: "SG", label: "Singapore" },
-  { value: "NZ", label: "New Zealand" },
-  { value: "Other", label: "Other" },
 ];
 
 export function StepProfile() {
@@ -42,56 +28,55 @@ export function StepProfile() {
   } = useFormContext<OnboardingData>();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">
-          Your Profile
+    <div className="rounded-2xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.24)] sm:p-6">
+      <div className="border-b border-[var(--surface-border)] pb-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Workspace profile</p>
+        <h2 className="mt-2 text-xl font-semibold text-[var(--foreground)]">
+          Add the details clients will recognize
         </h2>
-        <p className="text-sm text-[var(--muted)] mt-1">
-          Tell us about yourself and your coaching brand.
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          These details appear in your dashboard and help NutriRelay time reminders and reports correctly.
         </p>
       </div>
 
-      <FormSection title="Personal Information">
-        <Input
-          label="Full Name"
-          placeholder="John Doe"
-          error={errors.fullName?.message}
-          {...register("fullName")}
-        />
-        <Input
-          label="Display Name"
-          placeholder="John"
-          error={errors.displayName?.message}
-          {...register("displayName")}
-        />
-      </FormSection>
+      <div className="mt-6 space-y-6">
+        <FormSection title="Trainer identity" description="Use the name you want clients and operators to recognize.">
+          <Input
+            label="Full name"
+            placeholder="Yash Sonare"
+            error={errors.fullName?.message}
+            {...register("fullName")}
+          />
+          <Input
+            label="Trainer display name"
+            placeholder="Coach Yash"
+            error={errors.displayName?.message}
+            {...register("displayName")}
+          />
+        </FormSection>
 
-      <FormSection title="Business Details">
-        <Input
-          label="Business / Coaching Brand"
-          placeholder="Your coaching brand"
-          error={errors.businessName?.message}
-          {...register("businessName")}
-        />
-      </FormSection>
+        <FormSection title="Coaching brand">
+          <Input
+            label="Business or coaching brand"
+            placeholder="Your coaching brand"
+            error={errors.businessName?.message}
+            {...register("businessName")}
+          />
+        </FormSection>
 
-      <FormSection title="Location">
-        <Select
-          label="Timezone"
-          placeholder="Select your timezone"
-          options={timezoneOptions}
-          error={errors.timezone?.message}
-          {...register("timezone")}
-        />
-        <Select
-          label="Country"
-          placeholder="Select your country"
-          options={countryOptions}
-          error={errors.country?.message}
-          {...register("country")}
-        />
-      </FormSection>
+        <div className="space-y-1.5">
+          <Select
+            label="Timezone"
+            placeholder="Choose your timezone for reminders and reports"
+            options={timezoneOptions}
+            error={errors.timezone?.message}
+            {...register("timezone")}
+          />
+          <p className="text-xs leading-5 text-[var(--muted)]">
+            Next: connect your WhatsApp coaching number from Settings after setup.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

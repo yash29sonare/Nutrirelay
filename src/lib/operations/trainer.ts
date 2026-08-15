@@ -31,6 +31,8 @@ export interface TrainerProfile {
 }
 
 export interface OnboardingDataInput {
+  fullName: string
+  displayName: string
   businessName: string
   timezone: string
   country: string
@@ -146,6 +148,7 @@ export async function saveOnboardingData(authUserId: string, input: OnboardingDa
   const { error } = await db
     .from("trainers")
     .update({
+      name: input.displayName,
       business_name: input.businessName,
       timezone: input.timezone,
       country: input.country,
@@ -154,6 +157,18 @@ export async function saveOnboardingData(authUserId: string, input: OnboardingDa
 
   if (error) {
     throw new Error(`Failed to save onboarding data: ${error.message}`)
+  }
+
+  const { error: profileError } = await db
+    .from("profiles")
+    .update({
+      full_name: input.fullName,
+    })
+    .eq("id", authUserId)
+    .neq("role", "admin")
+
+  if (profileError) {
+    throw new Error(`Failed to save onboarding profile: ${profileError.message}`)
   }
 }
 
