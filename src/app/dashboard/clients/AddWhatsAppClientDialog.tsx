@@ -1,6 +1,7 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useState, useTransition } from "react"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { Dialog } from "@/components/ui/Dialog"
@@ -15,8 +16,21 @@ const INITIAL_STATE: AddWhatsAppClientActionState = {
 }
 
 export function AddWhatsAppClientDialog() {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [state, formAction, pending] = useActionState(addWhatsAppClientAction, INITIAL_STATE)
+  const [state, setState] = useState<AddWhatsAppClientActionState>(INITIAL_STATE)
+  const [pending, startTransition] = useTransition()
+
+  function handleAction(formData: FormData) {
+    startTransition(async () => {
+      const result = await addWhatsAppClientAction(state, formData)
+      setState(result)
+      if (result.ok) {
+        setOpen(false)
+        router.refresh()
+      }
+    })
+  }
 
   return (
     <>
@@ -30,7 +44,7 @@ export function AddWhatsAppClientDialog() {
       </Button>
 
       <Dialog open={open} onClose={() => setOpen(false)} title="Add WhatsApp client">
-        <form action={formAction} className="space-y-4">
+        <form action={handleAction} className="space-y-4">
           <Input
             label="Client name"
             name="clientName"

@@ -9,11 +9,24 @@ import { ClientFilters } from "./ClientFilters"
 import { AddWhatsAppClientDialog } from "./AddWhatsAppClientDialog"
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getClientList } from "@/lib/operations/clients"
+import { getTrainerWhatsAppClientCount, listTrainerWhatsAppClients, type TrainerWhatsAppClientRow } from "@/lib/operations/trainer-whatsapp-clients"
 import { getClientRiskLevel } from "@/lib/domain/dashboardSemantics"
 import { createClient } from "@/utils/supabase/server"
 import { getWhatsAppServiceDb } from "@/lib/whatsapp/service-db"
 import { getPlanClientLimit } from "@/lib/entitlements"
 import type { ClientSummary } from "@/types/dashboard"
+
+type LegacyRosterRow = {
+  kind: "legacy"
+  client: ClientSummary
+}
+
+type WhatsAppRosterRow = {
+  kind: "whatsapp"
+  client: TrainerWhatsAppClientRow
+}
+
+type RosterRow = LegacyRosterRow | WhatsAppRosterRow
 
 function getInitials(name: string): string {
   return name
@@ -42,6 +55,34 @@ function getStatusBadge(client: ClientSummary) {
     return <Badge variant="success">On track</Badge>
   }
   return <Badge variant="default">No meals today</Badge>
+}
+
+function getOnboardingBadge(status: string) {
+  switch (status) {
+    case "sent":
+      return <Badge variant="success">Onboarding sent</Badge>
+    case "pending":
+      return <Badge variant="warning">Onboarding pending</Badge>
+    case "failed":
+      return <Badge variant="danger">Onboarding failed</Badge>
+    default:
+      return <Badge variant="default">Onboarding not sent</Badge>
+  }
+}
+
+function getWhatsAppClientList(
+  clients: TrainerWhatsAppClientRow[],
+  filters: { search: string; status: "all" | "risk" | "compliant" | "inactive" },
+): TrainerWhatsAppClientRow[] {
+  return clients.filter((client) => {
+    if (filters.search && !client.client_name.toLowerCase().includes(filters.search.toLowerCase())) {
+      return false
+    }
+
+    if (filters.status === "risk" || filters.status === "compliant") return false
+    if (filters.status === "inactive") return client.status === "active"
+    return true
+  })
 }
 
 interface AddClientReadiness {
@@ -159,8 +200,22 @@ export default async function ClientsPage({
     result?.success === true
       ? getClientList(result.data, { search: q, status: validStatus })
       : []
+  const whatsappClients = authUserId
+    ? await listTrainerWhatsAppClients(authUserId)
+    : []
+  const filteredWhatsAppClients = getWhatsAppClientList(whatsappClients, {
+    search: q,
+    status: validStatus,
+  })
+  const rosterRows: RosterRow[] = [
+    ...clients.map((client) => ({ kind: "legacy" as const, client })),
+    ...filteredWhatsAppClients.map((client) => ({ kind: "whatsapp" as const, client })),
+  ]
+  const activeClientCount = authUserId
+    ? clients.length + await getTrainerWhatsAppClientCount(authUserId)
+    : 0
   const addClientReadiness = authUserId
-    ? await getAddClientReadiness(authUserId, result?.success === true ? result.data.clients.length : 0)
+    ? await getAddClientReadiness(authUserId, activeClientCount)
     : null
 
   return (
@@ -169,7 +224,7 @@ export default async function ClientsPage({
         title="Clients"
         description={
           authUserId
-            ? `${clients.length} client${clients.length !== 1 ? "s" : ""} in your roster`
+            ? `${rosterRows.length} client${rosterRows.length !== 1 ? "s" : ""} in your roster`
             : "Sign in to view your clients"
         }
         actions={addClientReadiness?.canAddClient ? <AddWhatsAppClientDialog /> : null}
@@ -194,7 +249,7 @@ export default async function ClientsPage({
           </div>
         )}
 
-        {authUserId && clients.length === 0 && (
+        {authUserId && rosterRows.length === 0 && (
           <div className="flex flex-1 items-center justify-center">
             <EmptyState
               icon={<Users size={18} aria-hidden="true" />}
@@ -225,30 +280,57 @@ export default async function ClientsPage({
           </div>
         )}
 
-        {authUserId && clients.length > 0 && (
+        {authUserId && rosterRows.length > 0 && (
           <div className="flex flex-col gap-2">
-            {clients.map((client) => (
-              <Link
-                key={client.client_id}
-                href={`/dashboard/clients/${client.client_id}`}
-                className="flex items-center gap-3 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-card)] px-5 py-3 transition-colors duration-150 hover:bg-[var(--surface-overlay)]"
-              >
-                <Avatar
-                  fallback={getInitials(client.client_name)}
-                  size="md"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                    {client.client_name}
-                  </p>
-                  <p className="text-xs text-[var(--muted)] mt-0.5">
-                    {client.total_meals_logged_today} meal
-                    {client.total_meals_logged_today !== 1 ? "s" : ""} today
-                    &nbsp;·&nbsp;{client.total_calories_today} kcal
-                  </p>
+            {rosterRows.map((row) => (
+              row.kind === "legacy" ? (
+                <Link
+                  key={`legacy-${row.client.client_id}`}
+                  href={`/dashboard/clients/${row.client.client_id}`}
+                  className="flex items-center gap-3 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-card)] px-5 py-3 transition-colors duration-150 hover:bg-[var(--surface-overlay)]"
+                >
+                  <Avatar
+                    fallback={getInitials(row.client.client_name)}
+                    size="md"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[var(--foreground)] truncate">
+                      {row.client.client_name}
+                    </p>
+                    <p className="text-xs text-[var(--muted)] mt-0.5">
+                      {row.client.total_meals_logged_today} meal
+                      {row.client.total_meals_logged_today !== 1 ? "s" : ""} today
+                      &nbsp;·&nbsp;{row.client.total_calories_today} kcal
+                    </p>
+                  </div>
+                  {getStatusBadge(row.client)}
+                </Link>
+              ) : (
+                <div
+                  key={`whatsapp-${row.client.client_id}`}
+                  className="flex items-center gap-3 rounded-xl border border-[var(--surface-border)] bg-[var(--surface-card)] px-5 py-3"
+                >
+                  <Avatar
+                    fallback={getInitials(row.client.client_name)}
+                    size="md"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                      {row.client.client_name}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">
+                      {row.client.whatsapp_number ?? "WhatsApp number saved"}
+                      &nbsp;·&nbsp;{row.client.status}
+                    </p>
+                    {row.client.onboarding_failure_reason ? (
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        {row.client.onboarding_failure_reason}
+                      </p>
+                    ) : null}
+                  </div>
+                  {getOnboardingBadge(row.client.onboarding_message_status)}
                 </div>
-                {getStatusBadge(client)}
-              </Link>
+              )
             ))}
           </div>
         )}
