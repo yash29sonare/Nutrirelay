@@ -11,6 +11,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { isClientAtRisk } from "@/lib/domain/dashboardSemantics"
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp/service-db"
 import type { Database } from "@/shared/types/supabase"
 import type {
   ClientSummary,
@@ -43,7 +44,7 @@ type TrainerRow = Pick<
 
 type ProfileRow = Pick<
   Database["public"]["Tables"]["profiles"]["Row"],
-  "id" | "full_name"
+  "id" | "full_name" | "phone_number"
 >
 
 type FoodLogRow = Pick<
@@ -59,6 +60,8 @@ type StrikeRow = Pick<
 interface WhatsAppClientDashboardRow {
   client_id: string
   client_name: string | null
+  whatsapp_number: string | null
+  normalized_whatsapp_number: string | null
   status: string | null
   onboarding_message_status: string | null
 }
@@ -235,9 +238,32 @@ async function augmentDashboardWithWhatsAppClients(
   const dataWarnings = [...(dto.data_warnings ?? [])]
   const { data: whatsappClients, error: whatsappClientsError } = await db
     .from("trainer_whatsapp_clients")
-    .select("client_id, client_name, status, onboarding_message_status")
+    .select("client_id, client_name, whatsapp_number, normalized_whatsapp_number, status, onboarding_message_status")
     .eq("trainer_id", authUserId)
-    .eq("status", "active")
+    .neq("status", "archived")
+
+  const legacyProfilesRes = dto.clients.length > 0
+    ? await db
+        .from("profiles")
+        .select("id, phone_number")
+        .in("id", dto.clients.map((client) => client.client_id))
+    : { data: [], error: null }
+
+  if (legacyProfilesRes.error) {
+    dataWarnings.push("Legacy client phone metadata could not be loaded.")
+  }
+
+  const legacyPhonesByClientId = new Map(
+    ((legacyProfilesRes.data ?? []) as Array<{ id: string; phone_number: string | null }>).map((row) => [
+      row.id,
+      normalizeWhatsAppPhone(row.phone_number),
+    ]),
+  )
+  const legacyClientsWithPhone = dto.clients.map((client) => ({
+    ...client,
+    client_kind: client.client_kind ?? ("legacy" as const),
+    normalized_phone: client.normalized_phone ?? legacyPhonesByClientId.get(client.client_id) ?? null,
+  }))
 
   if (whatsappClientsError) {
     dataWarnings.push("WhatsApp-only clients could not be loaded.")
@@ -247,17 +273,43 @@ async function augmentDashboardWithWhatsAppClients(
         ...dto.trainer,
         display_name: displayName,
       },
+      clients: legacyClientsWithPhone,
       data_warnings: dataWarnings,
     }
   }
 
   const whatsappRows = (whatsappClients ?? []) as WhatsAppClientDashboardRow[]
-  if (whatsappRows.length === 0) {
+  const whatsappPhoneSet = new Set(
+    whatsappRows
+      .map((row) => normalizeWhatsAppPhone(row.normalized_whatsapp_number ?? row.whatsapp_number))
+      .filter((phone): phone is string => Boolean(phone)),
+  )
+  const canonicalLegacyClients = legacyClientsWithPhone.filter((client) =>
+    !client.normalized_phone || !whatsappPhoneSet.has(client.normalized_phone),
+  )
+  const activeWhatsAppRows = whatsappRows.filter((row) => row.status === "active")
+
+  if (activeWhatsAppRows.length === 0) {
     return {
       ...dto,
       trainer: {
         ...dto.trainer,
         display_name: displayName,
+      },
+      clients: canonicalLegacyClients,
+      metrics: {
+        ...dto.metrics,
+        activeClients: canonicalLegacyClients.length,
+        complianceRate: canonicalLegacyClients.length > 0
+          ? Math.round((canonicalLegacyClients.filter((client) => client.total_meals_logged_today > 0).length / canonicalLegacyClients.length) * 100)
+          : 0,
+        atRiskClients: canonicalLegacyClients.filter((client) => isClientAtRisk(client)).length,
+      },
+      trends: {
+        ...dto.trends,
+        clientActivity: dto.trends.clientActivity.filter((activity) =>
+          canonicalLegacyClients.some((client) => client.client_id === activity.client_id),
+        ),
       },
       data_warnings: dataWarnings,
     }
@@ -265,9 +317,9 @@ async function augmentDashboardWithWhatsAppClients(
 
   const trainerTimezone = getTrainerTimezone(dto.trainer)
   const todayKey = todayKeyInTimezone(trainerTimezone)
-  const legacyActiveClients = dto.clients.length
+  const legacyActiveClients = canonicalLegacyClients.length
   const activityWindowStart = startOfUtcDay(-7).toISOString()
-  const whatsappClientIds = whatsappRows.map((row) => row.client_id)
+  const whatsappClientIds = activeWhatsAppRows.map((row) => row.client_id)
   const [foodLogsResult, communicationsResult, voiceNotesResult] = await Promise.all([
     db
       .from("food_logs")
@@ -316,12 +368,14 @@ async function augmentDashboardWithWhatsAppClients(
     whatsappComplianceSets.set(entry.date, new Set<string>())
   }
 
-  for (const row of whatsappRows) {
+  for (const row of activeWhatsAppRows) {
     const clientName = safeNullableString(row.client_name) ?? "Client"
     summaries.set(row.client_id, {
       client_id: row.client_id,
+      client_kind: "whatsapp",
       client_name: clientName,
       trainer_id: authUserId,
+      normalized_phone: normalizeWhatsAppPhone(row.normalized_whatsapp_number ?? row.whatsapp_number),
       total_meals_logged_today: 0,
       total_calories_today: 0,
       total_protein_today: 0,
@@ -419,7 +473,7 @@ async function augmentDashboardWithWhatsAppClients(
     })
   }
 
-  const clientsById = new Map(dto.clients.map((client) => [client.client_id, client]))
+  const clientsById = new Map<string, ClientSummary>(canonicalLegacyClients.map((client) => [client.client_id, client]))
   for (const summary of summaries.values()) {
     clientsById.set(summary.client_id, summary)
   }
@@ -427,7 +481,10 @@ async function augmentDashboardWithWhatsAppClients(
     left.client_name.localeCompare(right.client_name),
   )
 
-  const activityById = new Map(dto.trends.clientActivity.map((activity) => [activity.client_id, activity]))
+  const canonicalLegacyClientIds = new Set(canonicalLegacyClients.map((client) => client.client_id))
+  const activityById = new Map(dto.trends.clientActivity
+    .filter((activity) => canonicalLegacyClientIds.has(activity.client_id))
+    .map((activity) => [activity.client_id, activity]))
   for (const activity of activities.values()) {
     activityById.set(activity.client_id, activity)
   }
@@ -529,8 +586,10 @@ function mapDashboardData(raw: unknown): DashboardDataDTO {
     const row = c ?? {}
     return {
       client_id:                safeString(row.client_id),
+      client_kind:              "legacy",
       client_name:              safeString(row.client_name),
       trainer_id:               safeString(row.trainer_id),
+      normalized_phone:         normalizeWhatsAppPhone(safeNullableString(row.normalized_phone) ?? safeNullableString(row.phone_number)),
       total_meals_logged_today: safeNumber(row.total_meals_logged_today),
       total_calories_today:     safeNumber(row.total_calories_today),
       total_protein_today:      safeNumber(row.total_protein_today),
@@ -688,7 +747,7 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
   const [profilesRes, logsRes, strikesRes] = await Promise.all([
     db
       .from("profiles")
-      .select("id, full_name")
+      .select("id, full_name, phone_number")
       .in("id", clientIds),
     db
       .from("food_logs")
@@ -747,8 +806,10 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
   for (const clientId of clientIds) {
     clientSummaryMap.set(clientId, {
       client_id: clientId,
+      client_kind: "legacy",
       client_name: profileMap.get(clientId) ?? "",
       trainer_id: authUserId,
+      normalized_phone: normalizeWhatsAppPhone(profiles.find((profile) => profile.id === clientId)?.phone_number),
       total_meals_logged_today: 0,
       total_calories_today: 0,
       total_protein_today: 0,

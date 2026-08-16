@@ -104,7 +104,7 @@ function getWhatsAppClientList(
     }
 
     if (filters.status === "risk" || filters.status === "compliant") return false
-    if (filters.status === "inactive") return client.status === "active"
+    if (filters.status === "inactive") return client.status !== "active"
     return true
   })
 }
@@ -223,6 +223,7 @@ export default async function ClientsPage({
   const clients: ClientSummary[] =
     result?.success === true
       ? getClientList(result.data, { search: q, status: validStatus })
+          .filter((client) => client.client_kind !== "whatsapp")
       : []
   const whatsappClients = authUserId
     ? await listTrainerWhatsAppClients(authUserId)
@@ -235,8 +236,10 @@ export default async function ClientsPage({
     ...clients.map((client) => ({ kind: "legacy" as const, client })),
     ...filteredWhatsAppClients.map((client) => ({ kind: "whatsapp" as const, client })),
   ]
-  const activeClientCount = authUserId
-    ? clients.length + await getTrainerWhatsAppClientCount(authUserId)
+  const activeClientCount = authUserId && result?.success === true
+    ? result.data.metrics.activeClients
+    : authUserId
+      ? await getTrainerWhatsAppClientCount(authUserId)
     : 0
   const addClientReadiness = authUserId
     ? await getAddClientReadiness(authUserId, activeClientCount)

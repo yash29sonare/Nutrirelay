@@ -13,8 +13,10 @@
 // ── Client summary (view row) ──────────────────────────────────────
 export interface ClientSummary {
   client_id:                string;
+  client_kind?:             "legacy" | "whatsapp";
   client_name:              string;
   trainer_id:               string;
+  normalized_phone?:        string | null;
   total_meals_logged_today: number;
   total_calories_today:     number;
   total_protein_today:      number;
