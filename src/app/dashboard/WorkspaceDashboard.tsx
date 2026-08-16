@@ -24,7 +24,6 @@ interface WorkspaceDashboardProps {
   reportSummaries: OverviewReportSummary[]
   reportsReady: number
   whatsappConnection: WhatsAppConnectionOverview | null
-  userName: string | null
 }
 
 interface ClientOverview {
@@ -90,9 +89,8 @@ export function WorkspaceDashboard({
   reportSummaries,
   reportsReady,
   whatsappConnection,
-  userName,
 }: WorkspaceDashboardProps) {
-  const displayName = userName ?? data.trainer.business_name ?? "Trainer"
+  const displayName = data.trainer.display_name ?? "Trainer"
   const clients = makeClients({ data, clientSummaries, reportSummaries })
   const noMealClients = clients.filter((client) => client.meals_today === 0)
   const reviewClients = clients.filter((client) =>

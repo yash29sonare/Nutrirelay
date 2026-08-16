@@ -29,6 +29,7 @@ export interface TrainerInfo {
   auth_user_id:      string;
   onboarding_status: string;
   business_name:     string | null;
+  display_name:      string | null;
   timezone:          string | null;
   country:           string | null;
 }
@@ -82,5 +83,4 @@ export interface DashboardError {
 export type DashboardResult =
   | { success: true;  data: DashboardDataDTO }
   | { success: false; error: DashboardError };
-
 

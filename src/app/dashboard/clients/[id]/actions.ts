@@ -55,9 +55,11 @@ export async function updateWhatsAppClientDetailsAction(
     status: status === "inactive" ? "inactive" : "active",
   })
 
-  revalidatePath("/dashboard")
-  revalidatePath("/dashboard/clients")
-  revalidatePath(`/dashboard/clients/${clientId}`)
+  if (result.ok) {
+    revalidatePath("/dashboard")
+    revalidatePath("/dashboard/clients")
+    revalidatePath(`/dashboard/clients/${clientId}`)
+  }
 
   return result
 }

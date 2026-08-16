@@ -34,7 +34,7 @@ import type { TimelineEntry } from "@/types/timeline"
 import { ClientTimeline } from "./components/ClientTimeline"
 import { MealHistory } from "./components/MealHistory"
 import { ClientNameEditor } from "./components/ClientNameEditor"
-import { WhatsAppClientContactEditor } from "./components/WhatsAppClientContactEditor"
+import { WhatsAppClientEditButton } from "./components/WhatsAppClientContactEditor"
 import { SendOnboardingButton } from "../AddWhatsAppClientDialog"
 import { DailyReviewNav } from "./components/DailyReviewNav"
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
@@ -582,9 +582,12 @@ export default async function ClientDetailPage({
               {selectedDayWhatsAppMeals.length} intake event{selectedDayWhatsAppMeals.length !== 1 ? "s" : ""} on {formatDate(selectedDate)} · {formatNumber(Math.round(selectedDayMacros.calories))} kcal logged
             </p>
           </div>
-          {canSendWhatsAppOnlyOnboarding(whatsappClientDetail.onboarding_message_status, whatsappClientDetail.status) ? (
-            <SendOnboardingButton clientId={whatsappClientDetail.client_id} />
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <WhatsAppClientEditButton client={whatsappClientDetail} />
+            {canSendWhatsAppOnlyOnboarding(whatsappClientDetail.onboarding_message_status, whatsappClientDetail.status) ? (
+              <SendOnboardingButton clientId={whatsappClientDetail.client_id} />
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-6">
@@ -746,17 +749,6 @@ export default async function ClientDetailPage({
               </CardContent>
             </Card>
           </div>
-
-          <DashboardSection
-            title="Contact Details"
-            description="Edit the WhatsApp-only client record without creating a login account."
-          >
-            <Card>
-              <CardContent>
-                <WhatsAppClientContactEditor client={whatsappClientDetail} />
-              </CardContent>
-            </Card>
-          </DashboardSection>
 
           <DashboardSection
             title="Onboarding Readiness"

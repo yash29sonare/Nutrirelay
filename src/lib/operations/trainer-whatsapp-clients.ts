@@ -944,15 +944,21 @@ export async function updateTrainerWhatsAppClient(
     updates.normalized_whatsapp_number = nextPhone
   }
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from("trainer_whatsapp_clients")
     .update(updates)
     .eq("trainer_id", input.authUserId)
     .eq("client_id", input.clientId)
     .neq("status", "archived")
+    .select("client_id")
+    .maybeSingle()
 
   if (error) {
     return { ok: false, message: error.message }
+  }
+
+  if (!updated) {
+    return { ok: false, message: "Client details could not be updated." }
   }
 
   return { ok: true, message: "Client details updated." }

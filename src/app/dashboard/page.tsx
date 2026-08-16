@@ -105,7 +105,6 @@ export default async function DashboardPage() {
   computeOutcomeFromEvents(events);
   generateInsightsFromEvents(events);
 
-  const userName = (user?.user_metadata?.display_name as string) ?? null;
   const reportSummaries = reportsCenter
     ? reportsCenter.clients.map((client) => {
       const weeklyReport = reportsCenter.weeklyReports.find((report) => report.client.id === client.id);
@@ -138,7 +137,6 @@ export default async function DashboardPage() {
         reportSummaries={reportSummaries}
         reportsReady={reportsReady}
         whatsappConnection={whatsappConnection}
-        userName={userName}
       />
     </PageContainer>
   );

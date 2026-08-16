@@ -1,7 +1,10 @@
 "use client"
 
-import { useActionState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { Pencil } from "lucide-react"
 import { Button } from "@/components/ui/Button"
+import { Dialog } from "@/components/ui/Dialog"
 import { InlineNotice } from "@/components/ui/InlineNotice"
 import { updateWhatsAppClientDetailsAction, type WhatsAppClientDetailsActionState } from "../actions"
 import type { TrainerWhatsAppClientDetail } from "@/lib/operations/trainer-whatsapp-clients"
@@ -19,14 +22,33 @@ function fieldClassName(disabled = false): string {
   ].join(" ")
 }
 
-export function WhatsAppClientContactEditor({ client }: { client: TrainerWhatsAppClientDetail }) {
-  const updateAction = updateWhatsAppClientDetailsAction.bind(null, client.client_id)
-  const [state, formAction, pending] = useActionState(updateAction, INITIAL_STATE)
+export function WhatsAppClientContactEditor({
+  client,
+  onCancel,
+  onSaved,
+}: {
+  client: TrainerWhatsAppClientDetail
+  onCancel?: () => void
+  onSaved?: () => void
+}) {
+  const [state, setState] = useState<WhatsAppClientDetailsActionState>(INITIAL_STATE)
+  const [pending, startTransition] = useTransition()
   const reminderTimes = client.meal_reminder_times.join(", ")
   const phoneValue = client.normalized_whatsapp_number ?? client.whatsapp_number ?? ""
 
+  function handleAction(formData: FormData) {
+    setState(INITIAL_STATE)
+    startTransition(async () => {
+      const result = await updateWhatsAppClientDetailsAction(client.client_id, INITIAL_STATE, formData)
+      setState(result)
+      if (result.ok) {
+        onSaved?.()
+      }
+    })
+  }
+
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={handleAction} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <label className="space-y-1.5">
           <span className="text-xs font-medium text-[var(--muted)]">Client name</span>
@@ -121,11 +143,49 @@ export function WhatsAppClientContactEditor({ client }: { client: TrainerWhatsAp
         <InlineNotice variant={state.ok ? "success" : "error"}>{state.message}</InlineNotice>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {onCancel ? (
+          <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
+            Cancel
+          </Button>
+        ) : null}
         <Button type="submit" variant="brand" loading={pending}>
           Save details
         </Button>
       </div>
     </form>
+  )
+}
+
+export function WhatsAppClientEditButton({ client }: { client: TrainerWhatsAppClientDetail }) {
+  const [open, setOpen] = useState(false)
+  const router = useRouter()
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        icon={<Pencil size={14} />}
+        onClick={() => setOpen(true)}
+      >
+        Edit client
+      </Button>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Edit client"
+        className="max-h-[90vh] max-w-2xl overflow-y-auto"
+      >
+        <WhatsAppClientContactEditor
+          client={client}
+          onCancel={() => setOpen(false)}
+          onSaved={() => {
+            setOpen(false)
+            router.refresh()
+          }}
+        />
+      </Dialog>
+    </>
   )
 }
