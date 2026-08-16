@@ -21,6 +21,13 @@ export interface ClientSummary {
   total_carbs_today:        number;
   total_fat_today:          number;
   active_strike_count:      number;
+  last_activity_at?:        string | null;
+  pending_food_reviews?:    number;
+  pending_photo_reviews?:   number;
+  pending_voice_reviews?:   number;
+  pending_reply_reviews?:   number;
+  pending_updates?:         number;
+  onboarding_message_status?: string | null;
 }
 
 // ── Trainer block ──────────────────────────────────────────────────
@@ -65,6 +72,7 @@ export interface DashboardDataDTO {
     complianceOverTime: ComplianceEntry[];
     clientActivity:     ClientActivity[];
   };
+  data_warnings: string[];
 }
 
 // ── Error model ────────────────────────────────────────────────────
@@ -83,4 +91,3 @@ export interface DashboardError {
 export type DashboardResult =
   | { success: true;  data: DashboardDataDTO }
   | { success: false; error: DashboardError };
-

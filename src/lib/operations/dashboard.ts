@@ -60,6 +60,7 @@ interface WhatsAppClientDashboardRow {
   client_id: string
   client_name: string | null
   status: string | null
+  onboarding_message_status: string | null
 }
 
 interface WhatsAppFoodLogDashboardRow {
@@ -69,6 +70,25 @@ interface WhatsAppFoodLogDashboardRow {
   protein_g: unknown
   carbs_g: unknown
   fat_g: unknown
+  review_state: string | null
+  verification_status: string | null
+  wam_id: string | null
+}
+
+interface WhatsAppCommunicationDashboardRow {
+  whatsapp_client_id: string | null
+  direction: string | null
+  message_type: string | null
+  message_timestamp: string
+  wam_id: string | null
+  metadata: Record<string, unknown> | null
+  delivery_status: string | null
+}
+
+interface WhatsAppVoiceDashboardRow {
+  whatsapp_client_id: string | null
+  created_at: string
+  processing_status: string | null
 }
 
 // ── Safety helpers ─────────────────────────────────────────────────
@@ -117,6 +137,64 @@ function toUtcDateKey(iso: string): string {
   return new Date(iso).toISOString().slice(0, 10)
 }
 
+function getTrainerTimezone(trainer: { timezone: string | null; country: string | null }): string {
+  if (trainer.timezone?.trim()) return trainer.timezone.trim()
+  return trainer.country === "IN" ? "Asia/Kolkata" : "Asia/Kolkata"
+}
+
+function dateKeyInTimezone(iso: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(iso))
+
+  const year = parts.find((part) => part.type === "year")?.value
+  const month = parts.find((part) => part.type === "month")?.value
+  const day = parts.find((part) => part.type === "day")?.value
+  return year && month && day ? `${year}-${month}-${day}` : toUtcDateKey(iso)
+}
+
+function todayKeyInTimezone(timeZone: string): string {
+  return dateKeyInTimezone(new Date().toISOString(), timeZone)
+}
+
+function isPendingReviewStatus(value: string | null): boolean {
+  if (!value) return false
+  return ["needs_review", "review_needed", "pending", "failed", "error", "unverified"].includes(value.toLowerCase())
+}
+
+function metadataBoolean(metadata: Record<string, unknown> | null, keys: string[]): boolean {
+  for (const key of keys) {
+    if (metadata?.[key] === true) return true
+  }
+  return false
+}
+
+function metadataText(metadata: Record<string, unknown> | null, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = metadata?.[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function metadataNeedsReview(metadata: Record<string, unknown> | null): boolean {
+  if (!metadata) return false
+  const structured = metadata.structured_response && typeof metadata.structured_response === "object"
+    ? metadata.structured_response as Record<string, unknown>
+    : null
+
+  return metadataBoolean(metadata, ["needs_review", "requires_review", "trainer_review_required"])
+    || metadataBoolean(structured, ["needs_review", "requires_review", "trainer_review_required"])
+    || isPendingReviewStatus(metadataText(metadata, ["parser_status", "processing_status", "automation_state", "status"]))
+}
+
+function bump(map: Map<string, number>, key: string, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount)
+}
+
 async function readTrainerDisplayName(
   db: ReturnType<typeof getDynamicDb>,
   authUserId: string,
@@ -154,19 +232,22 @@ async function augmentDashboardWithWhatsAppClients(
 ): Promise<DashboardDataDTO> {
   const db = getDynamicDb()
   const displayName = dto.trainer.display_name ?? await readTrainerDisplayName(db, authUserId)
+  const dataWarnings = [...(dto.data_warnings ?? [])]
   const { data: whatsappClients, error: whatsappClientsError } = await db
     .from("trainer_whatsapp_clients")
-    .select("client_id, client_name, status")
+    .select("client_id, client_name, status, onboarding_message_status")
     .eq("trainer_id", authUserId)
     .eq("status", "active")
 
   if (whatsappClientsError) {
+    dataWarnings.push("WhatsApp-only clients could not be loaded.")
     return {
       ...dto,
       trainer: {
         ...dto.trainer,
         display_name: displayName,
       },
+      data_warnings: dataWarnings,
     }
   }
 
@@ -178,24 +259,62 @@ async function augmentDashboardWithWhatsAppClients(
         ...dto.trainer,
         display_name: displayName,
       },
+      data_warnings: dataWarnings,
     }
   }
 
-  const todayKey = startOfUtcDay().toISOString().slice(0, 10)
+  const trainerTimezone = getTrainerTimezone(dto.trainer)
+  const todayKey = todayKeyInTimezone(trainerTimezone)
+  const legacyActiveClients = dto.clients.length
   const activityWindowStart = startOfUtcDay(-7).toISOString()
   const whatsappClientIds = whatsappRows.map((row) => row.client_id)
-  const { data: whatsappLogs, error: whatsappLogsError } = await db
-    .from("food_logs")
-    .select("whatsapp_client_id, logged_at, calories, protein_g, carbs_g, fat_g")
-    .eq("trainer_id", authUserId)
-    .in("whatsapp_client_id", whatsappClientIds)
-    .gte("logged_at", activityWindowStart)
+  const [foodLogsResult, communicationsResult, voiceNotesResult] = await Promise.all([
+    db
+      .from("food_logs")
+      .select("whatsapp_client_id, logged_at, calories, protein_g, carbs_g, fat_g, review_state, verification_status, wam_id")
+      .eq("trainer_id", authUserId)
+      .in("whatsapp_client_id", whatsappClientIds)
+      .gte("logged_at", activityWindowStart),
+    db
+      .from("communication_logs")
+      .select("whatsapp_client_id, direction, message_type, message_timestamp, wam_id, metadata, delivery_status")
+      .eq("trainer_id", authUserId)
+      .in("whatsapp_client_id", whatsappClientIds)
+      .gte("message_timestamp", activityWindowStart)
+      .order("message_timestamp", { ascending: false })
+      .limit(Math.min(Math.max(whatsappClientIds.length * 20, 50), 500)),
+    db
+      .from("voice_notes")
+      .select("whatsapp_client_id, created_at, processing_status")
+      .in("whatsapp_client_id", whatsappClientIds)
+      .gte("created_at", activityWindowStart)
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Math.max(whatsappClientIds.length * 20, 50), 500)),
+  ])
 
-  const logs = whatsappLogsError
+  if (foodLogsResult.error) dataWarnings.push("WhatsApp-only food logs could not be loaded.")
+  if (communicationsResult.error) dataWarnings.push("WhatsApp-only communications could not be loaded.")
+  if (voiceNotesResult.error) dataWarnings.push("WhatsApp-only voice notes could not be loaded.")
+
+  const logs = foodLogsResult.error
     ? []
-    : (whatsappLogs ?? []) as WhatsAppFoodLogDashboardRow[]
+    : (foodLogsResult.data ?? []) as WhatsAppFoodLogDashboardRow[]
+  const communications = communicationsResult.error
+    ? []
+    : (communicationsResult.data ?? []) as WhatsAppCommunicationDashboardRow[]
+  const voiceNotes = voiceNotesResult.error
+    ? []
+    : (voiceNotesResult.data ?? []) as WhatsAppVoiceDashboardRow[]
   const summaries = new Map<string, ClientSummary>()
   const activities = new Map<string, ClientActivity>()
+  const pendingFoodReviews = new Map<string, number>()
+  const pendingPhotoReviews = new Map<string, number>()
+  const pendingVoiceReviews = new Map<string, number>()
+  const pendingReplyReviews = new Map<string, number>()
+  const whatsappComplianceSets = new Map<string, Set<string>>()
+  for (const entry of dto.trends.complianceOverTime) {
+    whatsappComplianceSets.set(entry.date, new Set<string>())
+  }
 
   for (const row of whatsappRows) {
     const clientName = safeNullableString(row.client_name) ?? "Client"
@@ -209,6 +328,13 @@ async function augmentDashboardWithWhatsAppClients(
       total_carbs_today: 0,
       total_fat_today: 0,
       active_strike_count: 0,
+      last_activity_at: null,
+      pending_food_reviews: 0,
+      pending_photo_reviews: 0,
+      pending_voice_reviews: 0,
+      pending_reply_reviews: 0,
+      pending_updates: 0,
+      onboarding_message_status: row.onboarding_message_status,
     })
     activities.set(row.client_id, {
       client_id: row.client_id,
@@ -226,7 +352,7 @@ async function augmentDashboardWithWhatsAppClients(
     const activity = activities.get(row.whatsapp_client_id)
     if (!summary || !activity) continue
 
-    if (toUtcDateKey(row.logged_at) === todayKey) {
+    if (dateKeyInTimezone(row.logged_at, trainerTimezone) === todayKey) {
       summary.total_meals_logged_today += 1
       summary.total_calories_today += safeNumber(row.calories)
       summary.total_protein_today += safeNumber(row.protein_g)
@@ -234,12 +360,63 @@ async function augmentDashboardWithWhatsAppClients(
       summary.total_fat_today += safeNumber(row.fat_g)
     }
 
+    whatsappComplianceSets.get(dateKeyInTimezone(row.logged_at, trainerTimezone))?.add(row.whatsapp_client_id)
+
     activity.meals_logged += 1
     activity.total_calories += safeNumber(row.calories)
     activity.total_protein += safeNumber(row.protein_g)
     if (!activity.last_logged_at || row.logged_at > activity.last_logged_at) {
       activity.last_logged_at = row.logged_at
     }
+
+    if (isPendingReviewStatus(row.review_state) || isPendingReviewStatus(row.verification_status)) {
+      bump(pendingFoodReviews, row.whatsapp_client_id)
+    }
+  }
+
+  for (const row of communications) {
+    if (!row.whatsapp_client_id) continue
+    const activity = activities.get(row.whatsapp_client_id)
+    if (activity && (!activity.last_logged_at || row.message_timestamp > activity.last_logged_at)) {
+      activity.last_logged_at = row.message_timestamp
+    }
+    const needsReview = metadataNeedsReview(row.metadata) || isPendingReviewStatus(row.delivery_status)
+    if (!needsReview || row.direction !== "INBOUND") continue
+    if (row.message_type === "IMAGE") {
+      bump(pendingPhotoReviews, row.whatsapp_client_id)
+    } else {
+      bump(pendingReplyReviews, row.whatsapp_client_id)
+    }
+  }
+
+  for (const row of voiceNotes) {
+    if (!row.whatsapp_client_id) continue
+    const activity = activities.get(row.whatsapp_client_id)
+    if (activity && (!activity.last_logged_at || row.created_at > activity.last_logged_at)) {
+      activity.last_logged_at = row.created_at
+    }
+    if (isPendingReviewStatus(row.processing_status)) {
+      bump(pendingVoiceReviews, row.whatsapp_client_id)
+    }
+  }
+
+  for (const [clientId, summary] of summaries.entries()) {
+    const activity = activities.get(clientId)
+    const pendingUpdates =
+      (pendingFoodReviews.get(clientId) ?? 0)
+      + (pendingPhotoReviews.get(clientId) ?? 0)
+      + (pendingVoiceReviews.get(clientId) ?? 0)
+      + (pendingReplyReviews.get(clientId) ?? 0)
+
+    summaries.set(clientId, {
+      ...summary,
+      last_activity_at: activity?.last_logged_at ?? null,
+      pending_food_reviews: pendingFoodReviews.get(clientId) ?? 0,
+      pending_photo_reviews: pendingPhotoReviews.get(clientId) ?? 0,
+      pending_voice_reviews: pendingVoiceReviews.get(clientId) ?? 0,
+      pending_reply_reviews: pendingReplyReviews.get(clientId) ?? 0,
+      pending_updates: pendingUpdates,
+    })
   }
 
   const clientsById = new Map(dto.clients.map((client) => [client.client_id, client]))
@@ -270,6 +447,24 @@ async function augmentDashboardWithWhatsAppClients(
   const complianceRate = activeClients > 0
     ? Math.round((todayLoggers / activeClients) * 100)
     : 0
+  const complianceOverTime = dto.trends.complianceOverTime.map((entry) => {
+    const legacyLoggerCount = legacyActiveClients > 0
+      ? Math.round((entry.compliance_rate / 100) * legacyActiveClients)
+      : 0
+    const whatsappLoggerCount = whatsappComplianceSets.get(entry.date)?.size ?? 0
+
+    return {
+      date: entry.date,
+      compliance_rate: activeClients > 0
+        ? Math.round(((legacyLoggerCount + whatsappLoggerCount) / activeClients) * 100)
+        : 0,
+    }
+  })
+  const firstCompliance = complianceOverTime[0]?.compliance_rate ?? 0
+  const lastCompliance = complianceOverTime[complianceOverTime.length - 1]?.compliance_rate ?? complianceRate
+  const weeklyProgress = firstCompliance > 0
+    ? Math.max(-100, Math.min(100, Math.round(((lastCompliance - firstCompliance) / firstCompliance) * 100)))
+    : lastCompliance > 0 ? 100 : 0
 
   return {
     ...dto,
@@ -282,12 +477,15 @@ async function augmentDashboardWithWhatsAppClients(
       ...dto.metrics,
       activeClients,
       complianceRate,
+      weeklyProgress,
       atRiskClients: clients.filter((client) => isClientAtRisk(client)).length,
     },
     trends: {
       ...dto.trends,
+      complianceOverTime,
       clientActivity,
     },
+    data_warnings: dataWarnings,
   }
 }
 
@@ -404,6 +602,7 @@ function mapDashboardData(raw: unknown): DashboardDataDTO {
       complianceOverTime,
       clientActivity,
     },
+    data_warnings: [],
   }
 }
 
@@ -481,6 +680,7 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
           })),
           clientActivity: [],
         },
+        data_warnings: [],
       },
     }
   }
@@ -666,6 +866,7 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
         complianceOverTime,
         clientActivity,
       },
+      data_warnings: [],
     },
   }
 }

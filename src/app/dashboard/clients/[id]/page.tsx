@@ -286,6 +286,11 @@ function statusVariant(status: string): "success" | "warning" | "danger" | "info
   }
 }
 
+function needsReviewStatus(value: string | null | undefined): boolean {
+  if (!value) return false
+  return ["needs_review", "review_needed", "pending", "failed", "error", "unverified"].includes(value.toLowerCase())
+}
+
 function messageTypeLabel(message: ClientWhatsAppMessage) {
   if (message.direction === "OUTBOUND" && message.message_type === "TEXT" && message.display_text.startsWith("Logged:")) {
     return "Auto reply"
@@ -521,6 +526,19 @@ export default async function ClientDetailPage({
     const selectedDayMacros = sumWhatsAppMeals(selectedDayWhatsAppMeals)
     const totalReports = whatsappDashboard.weeklyReportsCount + whatsappDashboard.monthlyReportsCount
     const reportDataUnavailable = whatsappDashboard.dataSourceWarnings.some((warning) => warning.includes("reports"))
+    const expectedMealCount = whatsappClientDetail.meal_reminder_times.length
+    const missedMealCount = expectedMealCount > 0
+      ? Math.max(expectedMealCount - selectedDayWhatsAppMeals.length, 0)
+      : 0
+    const reviewMeals = whatsappDashboard.meals.filter((meal) =>
+      needsReviewStatus(meal.review_state) || needsReviewStatus(meal.verification_status),
+    )
+    const reviewVoiceNotes = whatsappDashboard.voiceNotes.filter((note) =>
+      needsReviewStatus(note.processing_status),
+    )
+    const inboundReviewMessages = conversation.messages
+      .filter((message) => message.direction === "INBOUND")
+      .slice(0, 3)
     const recentActivity = [
       ...whatsappDashboard.meals.map((meal) => ({
         id: `meal-${meal.id}`,
@@ -602,6 +620,195 @@ export default async function ClientDetailPage({
               {whatsappDashboard.pendingReviewCount} WhatsApp item{whatsappDashboard.pendingReviewCount !== 1 ? "s" : ""} may need trainer review.
             </InlineNotice>
           ) : null}
+
+          <Card>
+            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">Daily review</p>
+                <p className="text-xs text-[var(--muted)]">
+                  Showing WhatsApp intake, media, review items, and timeline for {formatDate(selectedDate)}
+                </p>
+              </div>
+              <DailyReviewNav
+                clientId={id}
+                selectedDateKey={selectedDateKey}
+                previousDateKey={previousDateKey}
+                nextDateKey={nextDateKey}
+                todayDateKey={todayDateKey}
+              />
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
+            <DashboardSection title="Daily Macros" description={`${selectedDayWhatsAppMeals.length} logged intake event${selectedDayWhatsAppMeals.length !== 1 ? "s" : ""} for ${formatDate(selectedDate)}`}>
+              <Card>
+                <CardContent className="space-y-4">
+                  <MacroBar label="Calories (kcal)" current={selectedDayMacros.calories} target={TARGETS.calories} color="#22c55e" />
+                  <MacroBar label="Protein (g)" current={selectedDayMacros.protein} target={TARGETS.protein} color="#38bdf8" />
+                  <MacroBar label="Carbohydrates (g)" current={selectedDayMacros.carbs} target={TARGETS.carbs} color="#f59e0b" />
+                  <MacroBar label="Fat (g)" current={selectedDayMacros.fat} target={TARGETS.fat} color="#f472b6" />
+                </CardContent>
+              </Card>
+            </DashboardSection>
+
+            <DashboardSection title="Meal Completion" description="Today against configured reminder times.">
+              <Card>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Expected</p>
+                      <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--foreground)]">{expectedMealCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Logged</p>
+                      <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--foreground)]">{selectedDayWhatsAppMeals.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--muted)]">Missed</p>
+                      <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--foreground)]">{missedMealCount}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs leading-5 text-[var(--muted)]">
+                    {expectedMealCount > 0
+                      ? `Reminder times: ${whatsappClientDetail.meal_reminder_times.join(", ")}`
+                      : "Meal reminder times are not set for this client yet."}
+                  </p>
+                </CardContent>
+              </Card>
+            </DashboardSection>
+          </div>
+
+          <DashboardSection title="Trainer Review Queue" description="WhatsApp items that may need trainer attention.">
+            <Card>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Food review</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--foreground)]">{reviewMeals.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Voice review</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--foreground)]">{reviewVoiceNotes.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Inbound replies</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--foreground)]">{inboundReviewMessages.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Total flagged</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--foreground)]">{whatsappDashboard.pendingReviewCount}</p>
+                  </div>
+                </div>
+                {whatsappDashboard.pendingReviewCount === 0 && inboundReviewMessages.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">
+                    No review items yet. Food, photo, voice, and reply items appear here after WhatsApp activity is saved.
+                  </p>
+                ) : null}
+                {inboundReviewMessages.length > 0 ? (
+                  <div className="space-y-2">
+                    {inboundReviewMessages.map((message) => (
+                      <div key={`review-${message.id}`} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <Badge variant="info">{messageTypeLabel(message)}</Badge>
+                          <span className="text-xs text-[var(--muted)]">{formatDateTime(message.message_timestamp)}</span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-sm text-[var(--foreground)]">{message.display_text}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </DashboardSection>
+
+          <DashboardSection title="Food Logs" description="Food logs created from WhatsApp replies and media analysis.">
+            {whatsappDashboard.meals.length > 0 ? (
+              <Card>
+                <CardContent className="space-y-3">
+                  {whatsappDashboard.meals.slice(0, 8).map((meal) => (
+                    <div key={meal.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-[var(--foreground)]">{meal.notes ?? "Food log"}</p>
+                        <span className="text-xs text-[var(--muted)]">{formatDateTime(meal.logged_at)}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        <Badge variant="outline">{formatNumber(meal.calories ?? 0)} kcal</Badge>
+                        <Badge variant="outline">P {formatNumber(meal.protein_g ?? 0)}g</Badge>
+                        <Badge variant="outline">C {formatNumber(meal.carbs_g ?? 0)}g</Badge>
+                        <Badge variant="outline">F {formatNumber(meal.fat_g ?? 0)}g</Badge>
+                        <Badge variant={statusVariant(meal.review_state ?? meal.verification_status ?? "unknown")}>
+                          {humanizeValue(meal.review_state ?? meal.verification_status ?? "Review unknown")}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-6">
+                  <EmptyState title="No food logs yet" description="Meals will appear after this client replies on WhatsApp or sends food media." />
+                </CardContent>
+              </Card>
+            )}
+          </DashboardSection>
+
+          <DashboardSection title="Client Photos and Media" description={`Inbound WhatsApp media for ${formatDate(selectedDate)}`}>
+            {selectedDayMedia.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {selectedDayMedia.slice(0, 6).map((item) => (
+                  <Card key={item.id}>
+                    <CardContent className="space-y-2 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="info">{formatMediaKind(item.media_kind)}</Badge>
+                        <Badge variant="outline">{humanizeValue(item.message_type)}</Badge>
+                      </div>
+                      <p className="text-xs text-[var(--muted)]">{formatDateTime(item.message_timestamp)}</p>
+                      <p className="line-clamp-2 text-sm text-[var(--foreground)]">
+                        {item.caption ?? (item.has_media_url ? "Media reference saved." : "Media metadata saved.")}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="py-6">
+                  <EmptyState title="No media for this day" description="Use the date controls to review media from previous days. New photos, voice media, and documents appear after WhatsApp activity is saved." />
+                </CardContent>
+              </Card>
+            )}
+          </DashboardSection>
+
+          <DashboardSection title="Voice Notes" description="Voice-note transcripts and processing state from WhatsApp.">
+            {whatsappDashboard.voiceNotes.length > 0 ? (
+              <Card>
+                <CardContent className="space-y-3">
+                  {whatsappDashboard.voiceNotes.slice(0, 6).map((note) => (
+                    <div key={note.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <Badge variant={statusVariant(note.processing_status ?? "unknown")}>
+                          {humanizeValue(note.processing_status ?? "Processing state unknown")}
+                        </Badge>
+                        <span className="text-xs text-[var(--muted)]">{formatDateTime(note.created_at)}</span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-[var(--foreground)]">
+                        {note.transcript ?? "No transcript saved yet."}
+                      </p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-6">
+                  <EmptyState title="No voice notes yet" description="Voice notes and transcripts will appear after this client sends audio on WhatsApp." />
+                </CardContent>
+              </Card>
+            )}
+          </DashboardSection>
+
+          <WhatsAppConversation messages={conversation.messages} error={conversation.error} />
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.7fr)]">
             <Card>
@@ -846,126 +1053,6 @@ export default async function ClientDetailPage({
               </Card>
             </div>
           </DashboardSection>
-
-          <Card>
-            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[var(--foreground)]">Daily review</p>
-                <p className="text-xs text-[var(--muted)]">
-                  Showing WhatsApp intake, media, and timeline for {formatDate(selectedDate)}
-                </p>
-              </div>
-              <DailyReviewNav
-                clientId={id}
-                selectedDateKey={selectedDateKey}
-                previousDateKey={previousDateKey}
-                nextDateKey={nextDateKey}
-                todayDateKey={todayDateKey}
-              />
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
-            <DashboardSection title="Daily Macros" description={`${selectedDayWhatsAppMeals.length} logged intake event${selectedDayWhatsAppMeals.length !== 1 ? "s" : ""} for ${formatDate(selectedDate)}`}>
-              <Card>
-                <CardContent className="space-y-4">
-                  <MacroBar label="Calories (kcal)" current={selectedDayMacros.calories} target={TARGETS.calories} color="#22c55e" />
-                  <MacroBar label="Protein (g)" current={selectedDayMacros.protein} target={TARGETS.protein} color="#38bdf8" />
-                  <MacroBar label="Carbohydrates (g)" current={selectedDayMacros.carbs} target={TARGETS.carbs} color="#f59e0b" />
-                  <MacroBar label="Fat (g)" current={selectedDayMacros.fat} target={TARGETS.fat} color="#f472b6" />
-                </CardContent>
-              </Card>
-            </DashboardSection>
-
-            <DashboardSection title="Client Photos and Media" description={`Inbound WhatsApp media for ${formatDate(selectedDate)}`}>
-              {selectedDayMedia.length > 0 ? (
-                <div className="space-y-3">
-                  {selectedDayMedia.slice(0, 6).map((item) => (
-                    <Card key={item.id}>
-                      <CardContent className="space-y-2 p-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="info">{formatMediaKind(item.media_kind)}</Badge>
-                          <Badge variant="outline">{humanizeValue(item.message_type)}</Badge>
-                        </div>
-                        <p className="text-xs text-[var(--muted)]">{formatDateTime(item.message_timestamp)}</p>
-                        <p className="line-clamp-2 text-sm text-[var(--foreground)]">
-                          {item.caption ?? (item.has_media_url ? "Media reference saved." : "Media metadata saved.")}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="py-6">
-                    <EmptyState title="No media for this day" description="Use the date controls to review media from previous days. New photos, voice media, and documents appear after WhatsApp activity is saved." />
-                  </CardContent>
-                </Card>
-              )}
-            </DashboardSection>
-          </div>
-
-          <DashboardSection title="Latest Logged Intake" description="Food logs created from WhatsApp replies and media analysis.">
-            {whatsappDashboard.meals.length > 0 ? (
-              <Card>
-                <CardContent className="space-y-3">
-                  {whatsappDashboard.meals.slice(0, 8).map((meal) => (
-                    <div key={meal.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-[var(--foreground)]">{meal.notes ?? "Food log"}</p>
-                        <span className="text-xs text-[var(--muted)]">{formatDateTime(meal.logged_at)}</span>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        <Badge variant="outline">{formatNumber(meal.calories ?? 0)} kcal</Badge>
-                        <Badge variant="outline">P {formatNumber(meal.protein_g ?? 0)}g</Badge>
-                        <Badge variant="outline">C {formatNumber(meal.carbs_g ?? 0)}g</Badge>
-                        <Badge variant="outline">F {formatNumber(meal.fat_g ?? 0)}g</Badge>
-                        <Badge variant={statusVariant(meal.review_state ?? meal.verification_status ?? "unknown")}>
-                          {humanizeValue(meal.review_state ?? meal.verification_status ?? "Review unknown")}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="py-6">
-                  <EmptyState title="No food logs yet" description="Meals will appear after this client replies on WhatsApp or sends food media." />
-                </CardContent>
-              </Card>
-            )}
-          </DashboardSection>
-
-          <DashboardSection title="Voice Notes" description="Voice-note transcripts and processing state from WhatsApp.">
-            {whatsappDashboard.voiceNotes.length > 0 ? (
-              <Card>
-                <CardContent className="space-y-3">
-                  {whatsappDashboard.voiceNotes.slice(0, 6).map((note) => (
-                    <div key={note.id} className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <Badge variant={statusVariant(note.processing_status ?? "unknown")}>
-                          {humanizeValue(note.processing_status ?? "Processing state unknown")}
-                        </Badge>
-                        <span className="text-xs text-[var(--muted)]">{formatDateTime(note.created_at)}</span>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-[var(--foreground)]">
-                        {note.transcript ?? "No transcript saved yet."}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="py-6">
-                  <EmptyState title="No voice notes yet" description="Voice notes and transcripts will appear after this client sends audio on WhatsApp." />
-                </CardContent>
-              </Card>
-            )}
-          </DashboardSection>
-
-          <WhatsAppConversation messages={conversation.messages} error={conversation.error} />
 
           <DashboardSection title="Reports" description="Weekly and monthly reports generated for this WhatsApp-only client.">
             <Card>

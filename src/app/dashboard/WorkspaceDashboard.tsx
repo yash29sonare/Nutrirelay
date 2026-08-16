@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, MessageCircle, Salad, Settings, Users } fr
 import { Badge } from "@/components/ui/Badge"
 import { Card, CardContent } from "@/components/ui/Card"
 import { DashboardSection } from "@/components/layout/DashboardSection"
+import { InlineNotice } from "@/components/ui/InlineNotice"
 import { formatRelativeDate } from "@/lib/format"
 import type { ClientSummaryCard } from "@/lib/dashboard-reads"
 import type { DashboardDataDTO } from "@/types/dashboard"
@@ -38,19 +39,39 @@ interface ClientOverview {
   report_ready_count: number
 }
 
-function getGreeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 12) return "Good morning"
-  if (hour < 17) return "Good afternoon"
-  return "Good evening"
+function getTrainerTimezone(data: DashboardDataDTO): string {
+  if (data.trainer.timezone?.trim()) return data.trainer.timezone.trim()
+  return data.trainer.country === "IN" ? "Asia/Kolkata" : "Asia/Kolkata"
 }
 
-function formatCurrentDate(): string {
-  return new Date().toLocaleDateString("en-IN", {
+function getTrainerHour(timeZone: string): number {
+  const hour = new Intl.DateTimeFormat("en-IN", {
+    timeZone,
+    hour: "numeric",
+    hour12: false,
+  }).format(new Date())
+  return Number(hour)
+}
+
+function getGreeting(timeZone: string): string {
+  const hour = getTrainerHour(timeZone)
+  if (hour < 5) return "Good night"
+  if (hour < 12) return "Good morning"
+  if (hour < 17) return "Good afternoon"
+  if (hour < 21) return "Good evening"
+  return "Good night"
+}
+
+function formatCurrentDate(timeZone: string): string {
+  return new Date().toLocaleString("en-IN", {
+    timeZone,
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   })
 }
 
@@ -72,12 +93,12 @@ function makeClients(input: {
     return {
       client_id: client.client_id,
       meals_today: summary?.meals_today ?? client.total_meals_logged_today,
-      last_activity_at: summary?.last_activity_at ?? summary?.last_logged ?? null,
-      pending_food_reviews: summary?.pending_food_reviews ?? 0,
-      pending_photo_reviews: summary?.pending_photo_reviews ?? 0,
-      pending_voice_reviews: summary?.pending_voice_reviews ?? 0,
-      pending_reply_reviews: summary?.pending_reply_reviews ?? 0,
-      pending_updates: summary?.pending_updates ?? 0,
+      last_activity_at: summary?.last_activity_at ?? summary?.last_logged ?? client.last_activity_at ?? null,
+      pending_food_reviews: summary?.pending_food_reviews ?? client.pending_food_reviews ?? 0,
+      pending_photo_reviews: summary?.pending_photo_reviews ?? client.pending_photo_reviews ?? 0,
+      pending_voice_reviews: summary?.pending_voice_reviews ?? client.pending_voice_reviews ?? 0,
+      pending_reply_reviews: summary?.pending_reply_reviews ?? client.pending_reply_reviews ?? 0,
+      pending_updates: summary?.pending_updates ?? client.pending_updates ?? 0,
       report_ready_count: report?.ready_count ?? 0,
     }
   })
@@ -91,6 +112,7 @@ export function WorkspaceDashboard({
   whatsappConnection,
 }: WorkspaceDashboardProps) {
   const displayName = data.trainer.display_name ?? "Trainer"
+  const trainerTimezone = getTrainerTimezone(data)
   const clients = makeClients({ data, clientSummaries, reportSummaries })
   const noMealClients = clients.filter((client) => client.meals_today === 0)
   const reviewClients = clients.filter((client) =>
@@ -104,6 +126,9 @@ export function WorkspaceDashboard({
     ...noMealClients.map((client) => client.client_id),
     ...reviewClients.map((client) => client.client_id),
     ...reportClients.map((client) => client.client_id),
+    ...data.clients
+      .filter((client) => client.onboarding_message_status === "failed")
+      .map((client) => client.client_id),
   ])
   const pendingUpdateClients = clients.filter((client) => client.pending_updates > 0)
   const mealsToday = clients.reduce((total, client) => total + client.meals_today, 0)
@@ -125,9 +150,9 @@ export function WorkspaceDashboard({
     <div className="space-y-7">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm text-[var(--muted)]">{formatCurrentDate()}</p>
+          <p className="text-sm text-[var(--muted)]">{formatCurrentDate(trainerTimezone)}</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
-            {getGreeting()}, {displayName}
+            {getGreeting(trainerTimezone)}, {displayName}
           </h1>
           <p className="mt-2 text-sm text-[var(--muted)]">Overall client status for today.</p>
         </div>
@@ -146,6 +171,12 @@ export function WorkspaceDashboard({
           </Link>
         )}
       </header>
+
+      {data.data_warnings.length > 0 ? (
+        <InlineNotice variant="warning">
+          Some overview data could not be loaded: {data.data_warnings.join(" ")}
+        </InlineNotice>
+      ) : null}
 
       <section aria-labelledby="today-summary">
         <h2 id="today-summary" className="sr-only">Today summary</h2>
