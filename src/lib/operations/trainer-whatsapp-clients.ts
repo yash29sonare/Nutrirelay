@@ -75,6 +75,7 @@ export interface TrainerWhatsAppClientDashboard {
   communicationCount: number
   pendingReviewCount: number
   lastActivityAt: string | null
+  dataSourceWarnings: string[]
 }
 
 export interface AddTrainerWhatsAppClientInput {
@@ -165,6 +166,15 @@ function metadataHasMediaUrl(metadata: Record<string, unknown> | null): boolean 
 function isPendingReviewStatus(value: string | null): boolean {
   if (!value) return false
   return ["needs_review", "review_needed", "pending", "failed", "error", "unverified"].includes(value.toLowerCase())
+}
+
+function resultWarning(
+  result: PromiseSettledResult<{ error?: { message?: string } | null }>,
+  label: string,
+): string | null {
+  if (result.status === "rejected") return `${label} could not be loaded.`
+  if (result.value.error) return `${label} could not be loaded.`
+  return null
 }
 
 function isEditableStatus(value: string): value is "active" | "inactive" {
@@ -356,6 +366,7 @@ export async function getTrainerWhatsAppClientDashboard(
     communicationCount: 0,
     pendingReviewCount: 0,
     lastActivityAt: null,
+    dataSourceWarnings: [],
   }
 
   const db = getWhatsAppServiceDb()
@@ -420,6 +431,15 @@ export async function getTrainerWhatsAppClientDashboard(
       .eq("trainer_id", authUserId)
       .eq("whatsapp_client_id", clientId),
   ])
+
+  const dataSourceWarnings = [
+    resultWarning(mealsResult, "Food logs"),
+    resultWarning(mediaResult, "Media messages"),
+    resultWarning(voiceNotesResult, "Voice notes"),
+    resultWarning(weeklyReportsResult, "Weekly reports"),
+    resultWarning(monthlyReportsResult, "Monthly reports"),
+    resultWarning(communicationsCountResult, "Message count"),
+  ].filter((warning): warning is string => Boolean(warning))
 
   const meals = mealsResult.status === "fulfilled" && !mealsResult.value.error
     ? ((mealsResult.value.data ?? []) as Array<{
@@ -503,6 +523,7 @@ export async function getTrainerWhatsAppClientDashboard(
       : 0,
     pendingReviewCount,
     lastActivityAt: timestamps.sort((a, b) => b.localeCompare(a))[0] ?? null,
+    dataSourceWarnings,
   }
 }
 

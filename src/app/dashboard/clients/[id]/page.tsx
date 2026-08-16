@@ -517,8 +517,10 @@ export default async function ClientDetailPage({
     const conversation = await getWhatsAppConversationWithTimeout(id, authUserId)
     const whatsappDashboard = await getTrainerWhatsAppClientDashboard(authUserId, id)
     const selectedDayWhatsAppMeals = whatsappDashboard.meals.filter((meal) => meal.logged_at.slice(0, 10) === selectedDateKey)
+    const selectedDayMedia = whatsappDashboard.media.filter((item) => item.message_timestamp.slice(0, 10) === selectedDateKey)
     const selectedDayMacros = sumWhatsAppMeals(selectedDayWhatsAppMeals)
     const totalReports = whatsappDashboard.weeklyReportsCount + whatsappDashboard.monthlyReportsCount
+    const reportDataUnavailable = whatsappDashboard.dataSourceWarnings.some((warning) => warning.includes("reports"))
     const recentActivity = [
       ...whatsappDashboard.meals.map((meal) => ({
         id: `meal-${meal.id}`,
@@ -586,6 +588,12 @@ export default async function ClientDetailPage({
         </div>
 
         <div className="space-y-6">
+          {whatsappDashboard.dataSourceWarnings.length > 0 ? (
+            <InlineNotice variant="warning">
+              Some client detail sections could not load from the WhatsApp-only read model: {whatsappDashboard.dataSourceWarnings.join(" ")}
+            </InlineNotice>
+          ) : null}
+
           {whatsappDashboard.pendingReviewCount > 0 ? (
             <InlineNotice variant="warning">
               {whatsappDashboard.pendingReviewCount} WhatsApp item{whatsappDashboard.pendingReviewCount !== 1 ? "s" : ""} may need trainer review.
@@ -837,7 +845,9 @@ export default async function ClientDetailPage({
                     </div>
                     <div>
                       <p className="text-xs text-[var(--muted)]">Reports</p>
-                      <p className="font-medium text-[var(--foreground)] tabular-nums">{totalReports}</p>
+                      <p className="font-medium text-[var(--foreground)] tabular-nums">
+                        {reportDataUnavailable ? "Unavailable" : totalReports}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -876,9 +886,9 @@ export default async function ClientDetailPage({
             </DashboardSection>
 
             <DashboardSection title="Client Photos and Media" description={`Inbound WhatsApp media for ${formatDate(selectedDate)}`}>
-              {whatsappDashboard.media.length > 0 ? (
+              {selectedDayMedia.length > 0 ? (
                 <div className="space-y-3">
-                  {whatsappDashboard.media.slice(0, 6).map((item) => (
+                  {selectedDayMedia.slice(0, 6).map((item) => (
                     <Card key={item.id}>
                       <CardContent className="space-y-2 p-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -896,7 +906,7 @@ export default async function ClientDetailPage({
               ) : (
                 <Card>
                   <CardContent className="py-6">
-                    <EmptyState title="No media yet" description="Photos, voice media, and documents will appear after this client sends them on WhatsApp." />
+                    <EmptyState title="No media for this day" description="Use the date controls to review media from previous days. New photos, voice media, and documents appear after WhatsApp activity is saved." />
                   </CardContent>
                 </Card>
               )}
@@ -978,7 +988,12 @@ export default async function ClientDetailPage({
                     <p className="mt-1 text-xl font-semibold text-[var(--foreground)] tabular-nums">{whatsappDashboard.monthlyReportsCount}</p>
                   </div>
                 </div>
-                {totalReports === 0 ? (
+                {reportDataUnavailable ? (
+                  <InlineNotice variant="warning">
+                    Report counts could not be loaded from the WhatsApp-only read model.
+                  </InlineNotice>
+                ) : null}
+                {!reportDataUnavailable && totalReports === 0 ? (
                   <EmptyState
                     title="No reports yet"
                     description="Reports will appear after WhatsApp activity creates enough nutrition history."
