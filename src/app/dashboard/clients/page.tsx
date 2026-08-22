@@ -229,7 +229,20 @@ export default async function ClientsPage({
   const whatsappClients = authUserId
     ? await listTrainerWhatsAppClients(authUserId)
     : []
-  const onboardingTemplatePreview = getOnboardingTemplatePreview()
+  const trainerRecord = result?.success === true
+    ? result.data.trainer as {
+        display_name?: string | null
+        full_name?: string | null
+        name?: string | null
+        business_name?: string | null
+      }
+    : null
+  const trainerName = trainerRecord?.display_name
+    ?? trainerRecord?.full_name
+    ?? trainerRecord?.name
+    ?? trainerRecord?.business_name
+    ?? null
+  const businessName = trainerRecord?.business_name ?? null
   const filteredWhatsAppClients = getWhatsAppClientList(whatsappClients, {
     search: q,
     status: validStatus,
@@ -364,7 +377,14 @@ export default async function ClientsPage({
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     {getOnboardingBadge(row.client.onboarding_message_status)}
                     {canSendOnboarding(row.client) ? (
-                      <SendOnboardingButton clientId={row.client.client_id} preview={onboardingTemplatePreview} />
+                      <SendOnboardingButton
+                        clientId={row.client.client_id}
+                        preview={getOnboardingTemplatePreview({
+                          clientName: row.client.client_name,
+                          trainerName,
+                          businessName,
+                        })}
+                      />
                     ) : null}
                   </div>
                 </div>

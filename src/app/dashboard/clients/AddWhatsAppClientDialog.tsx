@@ -149,11 +149,18 @@ export function SendOnboardingButton({
               </div>
               <div className="sm:col-span-2">
                 <p className="text-xs text-[var(--muted)]">Variables / components</p>
-                <p className="font-medium text-[var(--foreground)]">
+                <div className="mt-1 space-y-1 font-medium text-[var(--foreground)]">
                   {preview.components.length > 0
-                    ? preview.components.map((component) => `${component.type}: ${component.parameters.join(", ")}`).join("; ")
+                    ? preview.components.flatMap((component) =>
+                        component.parameters.map((parameter) => (
+                          <p key={`${component.type}-${parameter.placeholder}`} className="text-sm">
+                            {parameter.placeholder} = {parameter.valueKey}
+                            <span className="text-[var(--muted)]"> ({parameter.value})</span>
+                          </p>
+                        )),
+                      )
                     : "No variables"}
-                </p>
+                </div>
               </div>
             </div>
           </div>

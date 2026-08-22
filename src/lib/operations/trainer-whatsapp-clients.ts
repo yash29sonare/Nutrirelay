@@ -1,6 +1,11 @@
 import { getPlanClientLimit } from "@/lib/entitlements"
 import { getWhatsAppServiceDb, normalizeWhatsAppPhone } from "@/lib/whatsapp/service-db"
-import { sendTemplateMessage, type TemplateId } from "@/lib/whatsapp/send"
+import {
+  getWhatsAppTemplateLanguage,
+  getWhatsAppTemplateName,
+  sendTemplateMessage,
+  type TemplateId,
+} from "@/lib/whatsapp/send"
 
 export type WhatsAppClientStatus = "active" | "inactive" | "archived" | string
 export type OnboardingMessageStatus = "not_sent" | "pending" | "sent" | "failed" | string
@@ -78,6 +83,21 @@ export interface TrainerWhatsAppClientDashboard {
   dataSourceWarnings: string[]
 }
 
+export interface TrainerWhatsAppWindowStatus {
+  isOpen: boolean
+  openUntilIso: string | null
+  openUntilLabel: string | null
+  message: string
+}
+
+export interface DailyCheckInReadiness {
+  ready: boolean
+  reasons: string[]
+  template: WhatsAppTemplatePreview
+  trainerLocalDate: string
+  alreadySentToday: boolean
+}
+
 export interface AddTrainerWhatsAppClientInput {
   authUserId: string
   clientName: string
@@ -118,56 +138,104 @@ export interface UpdateTrainerWhatsAppClientResult {
   message: string
 }
 
-const DEFAULT_ONBOARDING_TEMPLATE_ID: TemplateId = "hello_world"
-const HELLO_WORLD_LOCAL_PREVIEW = "Hello World"
+const DEFAULT_TEMPLATE_VALUE = "there"
+const DEFAULT_BUSINESS_NAME = "NutriRelay"
 
-export interface OnboardingTemplatePreview {
+export interface WhatsAppTemplatePreview {
   available: boolean
   templateId: TemplateId | null
   templateName: string | null
   language: string | null
   components: Array<{
     type: "body" | "header"
-    parameters: string[]
+    parameters: Array<{
+      placeholder: string
+      valueKey: "client_name" | "trainer_name" | "business_name"
+      value: string
+    }>
   }>
   finalPreviewText: string
-  source: "env" | "default" | "unsupported_env"
+  source: "env" | "default"
   exactMetaRenderedTextAvailable: boolean
   editGuidance: string
 }
 
-function getConfiguredOnboardingTemplate(): { templateId: TemplateId | null; source: OnboardingTemplatePreview["source"] } {
-  const configured = process.env.WHATSAPP_ONBOARDING_TEMPLATE_ID?.trim()
-  if (!configured) return { templateId: DEFAULT_ONBOARDING_TEMPLATE_ID, source: "default" }
-  if (configured === "hello_world") return { templateId: "hello_world", source: "env" }
-  return { templateId: null, source: "unsupported_env" }
+export type OnboardingTemplatePreview = WhatsAppTemplatePreview
+
+function hasEnvValue(name: string): boolean {
+  return Boolean(process.env[name]?.trim())
 }
 
-export function getOnboardingTemplatePreview(): OnboardingTemplatePreview {
-  const configured = getConfiguredOnboardingTemplate()
+function templateValue(value: string | null | undefined, fallback = DEFAULT_TEMPLATE_VALUE): string {
+  return value?.trim() || fallback
+}
 
-  if (configured.templateId === "hello_world") {
-    return {
-      available: true,
-      templateId: "hello_world",
-      templateName: "hello_world",
-      language: "en_US",
-      components: [],
-      finalPreviewText: HELLO_WORLD_LOCAL_PREVIEW,
-      source: configured.source,
-      exactMetaRenderedTextAvailable: false,
-      editGuidance: "To change the actual WhatsApp message, update the approved template in Meta and wait for approval.",
-    }
-  }
+function buildTemplateComponents(input: {
+  clientName: string
+  trainerName: string
+  businessName: string
+}): WhatsAppTemplatePreview["components"] {
+  return [{
+    type: "body",
+    parameters: [
+      { placeholder: "{{1}}", valueKey: "client_name", value: input.clientName },
+      { placeholder: "{{2}}", valueKey: "trainer_name", value: input.trainerName },
+      { placeholder: "{{3}}", valueKey: "business_name", value: input.businessName },
+    ],
+  }]
+}
+
+export function getOnboardingTemplatePreview(input: {
+  clientName?: string | null
+  trainerName?: string | null
+  businessName?: string | null
+} = {}): OnboardingTemplatePreview {
+  const clientName = templateValue(input.clientName)
+  const trainerName = templateValue(input.trainerName, "your trainer")
+  const businessName = templateValue(input.businessName, DEFAULT_BUSINESS_NAME)
+  const templateName = getWhatsAppTemplateName("onboarding")
 
   return {
-    available: false,
-    templateId: null,
-    templateName: null,
-    language: null,
-    components: [],
-    finalPreviewText: "Onboarding template is not configured to a supported approved template.",
-    source: configured.source,
+    available: true,
+    templateId: templateName,
+    templateName,
+    language: getWhatsAppTemplateLanguage("onboarding"),
+    components: buildTemplateComponents({ clientName, trainerName, businessName }),
+    finalPreviewText: [
+      `Hi ${clientName}, this is ${trainerName} from ${businessName}.`,
+      "Welcome to NutriRelay. Reply here with your meals, photos, and voice notes so your trainer can track your daily nutrition.",
+    ].join("\n"),
+    source: hasEnvValue("WHATSAPP_ONBOARDING_TEMPLATE_NAME") || hasEnvValue("WHATSAPP_ONBOARDING_TEMPLATE_LANGUAGE")
+      ? "env"
+      : "default",
+    exactMetaRenderedTextAvailable: false,
+    editGuidance: "To change the actual WhatsApp message, update the approved template in Meta and wait for approval.",
+  }
+}
+
+export function getDailyCheckInTemplatePreview(input: {
+  clientName?: string | null
+  trainerName?: string | null
+  businessName?: string | null
+} = {}): WhatsAppTemplatePreview {
+  const clientName = templateValue(input.clientName)
+  const trainerName = templateValue(input.trainerName, "your trainer")
+  const businessName = templateValue(input.businessName, DEFAULT_BUSINESS_NAME)
+  const templateName = getWhatsAppTemplateName("daily_checkin")
+
+  return {
+    available: true,
+    templateId: templateName,
+    templateName,
+    language: getWhatsAppTemplateLanguage("daily_checkin"),
+    components: buildTemplateComponents({ clientName, trainerName, businessName }),
+    finalPreviewText: [
+      `Good morning ${clientName}. ${trainerName} from ${businessName} is ready for today's updates.`,
+      "Reply here with your first meal, food photos, or a voice note when you start logging today.",
+    ].join("\n"),
+    source: hasEnvValue("WHATSAPP_DAILY_CHECKIN_TEMPLATE_NAME") || hasEnvValue("WHATSAPP_DAILY_CHECKIN_TEMPLATE_LANGUAGE")
+      ? "env"
+      : "default",
     exactMetaRenderedTextAvailable: false,
     editGuidance: "To change the actual WhatsApp message, update the approved template in Meta and wait for approval.",
   }
@@ -197,6 +265,37 @@ function numericValue(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : null
+}
+
+function formatInTimeZone(value: Date, timeZone: string): string {
+  return value.toLocaleString("en-IN", {
+    timeZone,
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+}
+
+function dateKeyInTimeZone(value: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value)
+}
+
+function addHours(value: string, hours: number): Date | null {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return new Date(parsed.getTime() + hours * 60 * 60 * 1000)
+}
+
+function latestIso(values: Array<string | null | undefined>): string | null {
+  const valid = values
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => !Number.isNaN(new Date(value).getTime()))
+    .sort((a, b) => b.localeCompare(a))
+  return valid[0] ?? null
 }
 
 function metadataText(metadata: Record<string, unknown> | null, keys: string[]): string | null {
@@ -306,6 +405,199 @@ async function getPhoneEditLock(input: {
   return hasActivity
     ? { locked: true, reason: lockedMessage }
     : { locked: false, reason: null }
+}
+
+export async function getTrainerWhatsAppClientWindowStatus(
+  authUserId: string,
+  clientId: string,
+  timeZone: string,
+): Promise<TrainerWhatsAppWindowStatus> {
+  const db = getWhatsAppServiceDb()
+  const { data: client, error } = await db
+    .from("trainer_whatsapp_clients")
+    .select("client_id, normalized_whatsapp_number, whatsapp_number")
+    .eq("trainer_id", authUserId)
+    .eq("client_id", clientId)
+    .neq("status", "archived")
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to verify WhatsApp client access: ${error.message}`)
+  }
+
+  const row = client as {
+    client_id: string
+    normalized_whatsapp_number: string | null
+    whatsapp_number: string | null
+  } | null
+
+  if (!row) {
+    return {
+      isOpen: false,
+      openUntilIso: null,
+      openUntilLabel: null,
+      message: "WhatsApp window closed. Send an approved template first.",
+    }
+  }
+
+  const normalizedPhone = normalizeWhatsAppPhone(row.normalized_whatsapp_number ?? row.whatsapp_number)
+  const [communication, incomingWebhook, webhookEvent] = await Promise.all([
+    db
+      .from("communication_logs")
+      .select("message_timestamp")
+      .eq("trainer_id", authUserId)
+      .eq("whatsapp_client_id", clientId)
+      .eq("direction", "INBOUND")
+      .order("message_timestamp", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    normalizedPhone
+      ? db
+          .from("incoming_webhook_logs")
+          .select("received_at")
+          .eq("client_phone", normalizedPhone)
+          .order("received_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    normalizedPhone
+      ? db
+          .from("whatsapp_webhook_events")
+          .select("received_at")
+          .eq("trainer_id", authUserId)
+          .eq("client_phone", normalizedPhone)
+          .eq("event_category", "message")
+          .order("received_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+
+  const latestInboundAt = latestIso([
+    (communication.data as { message_timestamp?: string } | null)?.message_timestamp,
+    (incomingWebhook.data as { received_at?: string } | null)?.received_at,
+    (webhookEvent.data as { received_at?: string } | null)?.received_at,
+  ])
+  const openUntil = latestInboundAt ? addHours(latestInboundAt, 24) : null
+  const isOpen = Boolean(openUntil && openUntil.getTime() > Date.now())
+
+  if (!isOpen || !openUntil) {
+    return {
+      isOpen: false,
+      openUntilIso: null,
+      openUntilLabel: null,
+      message: "WhatsApp window closed. Send an approved template first.",
+    }
+  }
+
+  const openUntilLabel = formatInTimeZone(openUntil, timeZone)
+  return {
+    isOpen: true,
+    openUntilIso: openUntil.toISOString(),
+    openUntilLabel,
+    message: `WhatsApp window open until ${openUntilLabel}`,
+  }
+}
+
+export async function getDailyCheckInReadiness(input: {
+  authUserId: string
+  clientId: string
+  timeZone: string
+  trainerName?: string | null
+  businessName?: string | null
+}): Promise<DailyCheckInReadiness> {
+  const db = getWhatsAppServiceDb()
+  const todayKey = dateKeyInTimeZone(new Date(), input.timeZone)
+  const reasons: string[] = []
+
+  const [{ data: profile }, { data: trainer }, { data: credential }, { data: client }, { data: recentTemplates }] =
+    await Promise.all([
+      db
+        .from("profiles")
+        .select("role, status")
+        .eq("id", input.authUserId)
+        .maybeSingle(),
+      db
+        .from("trainers")
+        .select("account_status, onboarding_status, business_name")
+        .eq("auth_user_id", input.authUserId)
+        .maybeSingle(),
+      db
+        .from("trainer_waba_credentials")
+        .select("id")
+        .eq("trainer_id", input.authUserId)
+        .eq("status", "connected")
+        .not("phone_number_id", "is", null)
+        .not("waba_id", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from("trainer_whatsapp_clients")
+        .select("client_id, client_name, status, normalized_whatsapp_number, whatsapp_number")
+        .eq("trainer_id", input.authUserId)
+        .eq("client_id", input.clientId)
+        .neq("status", "archived")
+        .maybeSingle(),
+      db
+        .from("communication_logs")
+        .select("message_timestamp, metadata")
+        .eq("trainer_id", input.authUserId)
+        .eq("whatsapp_client_id", input.clientId)
+        .eq("direction", "OUTBOUND")
+        .eq("message_type", "TEMPLATE")
+        .order("message_timestamp", { ascending: false })
+        .limit(50),
+    ])
+
+  const trainerRow = trainer as { account_status?: string | null; onboarding_status?: string | null; business_name?: string | null } | null
+  const clientRow = client as {
+    client_id: string
+    client_name: string
+    status: string
+    normalized_whatsapp_number: string | null
+    whatsapp_number: string | null
+  } | null
+  const templateName = getWhatsAppTemplateName("daily_checkin")
+  const logs = (recentTemplates ?? []) as Array<{ message_timestamp: string | null; metadata: Record<string, unknown> | null }>
+  const alreadySentToday = logs.some((log) => {
+    const metadata = log.metadata ?? {}
+    const loggedTemplate = metadata.template_id ?? metadata.template_name
+    if (loggedTemplate !== templateName) return false
+    if (metadata.daily_checkin_date === todayKey) return true
+    return log.message_timestamp ? dateKeyInTimeZone(new Date(log.message_timestamp), input.timeZone) === todayKey : false
+  })
+
+  if ((profile as { role?: string | null } | null)?.role !== "trainer" || (profile as { status?: string | null } | null)?.status !== "active") {
+    reasons.push("Trainer account is not active.")
+  }
+  if (!trainerRow || trainerRow.account_status !== "active" || trainerRow.onboarding_status !== "active") {
+    reasons.push("Trainer onboarding/account status is not active.")
+  }
+  if (!credential) {
+    reasons.push("WhatsApp sender is not connected.")
+  }
+  if (!clientRow || clientRow.status !== "active") {
+    reasons.push("Client is not an active WhatsApp-only client.")
+  }
+  if (clientRow && !normalizeWhatsAppPhone(clientRow.normalized_whatsapp_number ?? clientRow.whatsapp_number)) {
+    reasons.push("Client WhatsApp number is invalid.")
+  }
+  if (alreadySentToday) {
+    reasons.push("Daily restart template already logged for this trainer-local date.")
+  }
+
+  return {
+    ready: reasons.length === 0,
+    reasons,
+    template: getDailyCheckInTemplatePreview({
+      clientName: clientRow?.client_name,
+      trainerName: input.trainerName,
+      businessName: input.businessName ?? trainerRow?.business_name,
+    }),
+    trainerLocalDate: todayKey,
+    alreadySentToday,
+  }
 }
 
 export async function listTrainerWhatsAppClients(authUserId: string): Promise<TrainerWhatsAppClientRow[]> {
@@ -752,31 +1044,53 @@ async function logOnboardingTemplate(input: {
     })
 }
 
+async function getTrainerTemplateIdentity(authUserId: string): Promise<{
+  trainerName: string
+  businessName: string
+}> {
+  const db = getWhatsAppServiceDb()
+  const [{ data: trainer }, { data: profile }] = await Promise.all([
+    db
+      .from("trainers")
+      .select("business_name")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle(),
+    db
+      .from("profiles")
+      .select("display_name, full_name")
+      .eq("id", authUserId)
+      .maybeSingle(),
+  ])
+
+  const businessName = templateValue(
+    (trainer as { business_name?: string | null } | null)?.business_name,
+    DEFAULT_BUSINESS_NAME,
+  )
+  const profileRow = profile as { display_name?: string | null; full_name?: string | null } | null
+
+  return {
+    trainerName: templateValue(profileRow?.display_name ?? profileRow?.full_name, businessName),
+    businessName,
+  }
+}
+
 async function sendOnboardingTemplate(input: {
   authUserId: string
   clientId: string
+  clientName: string
   normalizedPhone: string
   successMessage?: string
-  templateUnavailableMessage?: string
   sendFailureMessage?: string
   sendFailureOk?: boolean
 }): Promise<AddTrainerWhatsAppClientResult> {
   const db = getWhatsAppServiceDb()
-  const templateId = getConfiguredOnboardingTemplate().templateId
-
-  if (!templateId) {
-    await db
-      .from("trainer_whatsapp_clients")
-      .update({ onboarding_message_status: "not_sent" })
-      .eq("trainer_id", input.authUserId)
-      .eq("client_id", input.clientId)
-
-    return {
-      ok: input.sendFailureOk ?? true,
-      clientId: input.clientId,
-      message: input.templateUnavailableMessage ?? "Client saved. Onboarding template not sent because template is not ready.",
-    }
-  }
+  const templateId = getWhatsAppTemplateName("onboarding")
+  const identity = await getTrainerTemplateIdentity(input.authUserId)
+  const templateParams = [
+    templateValue(input.clientName),
+    identity.trainerName,
+    identity.businessName,
+  ] satisfies [string, string, string]
 
   await db
     .from("trainer_whatsapp_clients")
@@ -785,7 +1099,7 @@ async function sendOnboardingTemplate(input: {
     .eq("client_id", input.clientId)
 
   try {
-    const result = await sendTemplateMessage(input.authUserId, input.normalizedPhone, templateId, [])
+    const result = await sendTemplateMessage(input.authUserId, input.normalizedPhone, templateId, templateParams)
     await db
       .from("trainer_whatsapp_clients")
       .update({ onboarding_message_status: "sent" })
@@ -881,7 +1195,7 @@ export async function sendTrainerWhatsAppClientOnboarding(
   const db = getWhatsAppServiceDb()
   const { data: client, error } = await db
     .from("trainer_whatsapp_clients")
-    .select("client_id, normalized_whatsapp_number, whatsapp_number, status, onboarding_message_status")
+    .select("client_id, client_name, normalized_whatsapp_number, whatsapp_number, status, onboarding_message_status")
     .eq("trainer_id", authUserId)
     .eq("client_id", clientId)
     .maybeSingle()
@@ -892,6 +1206,7 @@ export async function sendTrainerWhatsAppClientOnboarding(
 
   const row = client as {
     client_id: string
+    client_name: string
     normalized_whatsapp_number: string | null
     whatsapp_number: string | null
     status: string
@@ -918,9 +1233,9 @@ export async function sendTrainerWhatsAppClientOnboarding(
   const result = await sendOnboardingTemplate({
     authUserId,
     clientId: row.client_id,
+    clientName: row.client_name,
     normalizedPhone,
     successMessage: "Onboarding template sent.",
-    templateUnavailableMessage: "Onboarding template is not ready.",
     sendFailureMessage: "Onboarding template failed to send. No free-form message was sent.",
     sendFailureOk: false,
   })

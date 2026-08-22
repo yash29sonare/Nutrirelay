@@ -9,6 +9,8 @@ import {
   type ClientOnboardingStep,
 } from "@/lib/whatsapp/onboardingStateMachine"
 
+const ONBOARDING_TEMPLATE_FALLBACK_PARAMS = ["there", "your trainer", "NutriRelay"] satisfies [string, string, string]
+
 function getDb() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -231,8 +233,8 @@ export async function startClientOnboarding(input: {
       input.trainerId,
       input.clientPhone,
       getOnboardingQuestion("height"),
-      "hello_world",
-      [],
+      "nutrirelay_client_onboarding",
+      ONBOARDING_TEMPLATE_FALLBACK_PARAMS,
     )
 
     await upsertOnboardingState({
@@ -289,7 +291,13 @@ export async function handleClientOnboardingAnswer(input: {
       lastQuestionSentAt: new Date().toISOString(),
     })
     try {
-      await sendMessage(input.trainerId, input.clientPhone, result.clarificationMessage ?? getOnboardingQuestion(state.current_step), "hello_world", [])
+      await sendMessage(
+        input.trainerId,
+        input.clientPhone,
+        result.clarificationMessage ?? getOnboardingQuestion(state.current_step),
+        "nutrirelay_client_onboarding",
+        ONBOARDING_TEMPLATE_FALLBACK_PARAMS,
+      )
     } catch {
       // Keep stored onboarding state even if the follow-up send fails.
     }
@@ -333,8 +341,8 @@ export async function handleClientOnboardingAnswer(input: {
       input.trainerId,
       input.clientPhone,
       completed ? (result.completionMessage ?? getOnboardingQuestion("complete")) : getOnboardingQuestion(result.nextStep),
-      "hello_world",
-      [],
+      "nutrirelay_client_onboarding",
+      ONBOARDING_TEMPLATE_FALLBACK_PARAMS,
     )
   } catch {
     // Keep stored onboarding state even if the follow-up send fails.

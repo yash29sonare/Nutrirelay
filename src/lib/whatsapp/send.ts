@@ -5,9 +5,9 @@ import { getWhatsAppServiceDb, normalizeWhatsAppPhone } from "@/lib/whatsapp/ser
 // ── Custom errors ──────────────────────────────────────────────────────────────
 
 export class WindowClosedError extends Error {
-  constructor(phone: string) {
+  constructor() {
     super(
-      `WhatsApp 24h session window is closed for ${phone}. Use sendTemplateMessage instead.`
+      "The 24-hour WhatsApp window is closed. Send an approved template first."
     );
     this.name = "WindowClosedError";
   }
@@ -63,6 +63,8 @@ function isWindowOpen(lastInboundAt: string | null): boolean {
 
 export type TemplateId =
   | "hello_world"
+  | "nutrirelay_client_onboarding"
+  | "nutrirelay_next_morning"
   | "meal_confirmation"
   | "missing_details_clarification"
   | "trainer_alert"
@@ -71,6 +73,8 @@ export type TemplateId =
 
 export type TemplateParamMap = {
   hello_world: [];
+  nutrirelay_client_onboarding: [clientName: string, trainerName: string, businessName: string];
+  nutrirelay_next_morning: [clientName: string, trainerName: string, businessName: string];
   meal_confirmation: [clientName: string, mealName: string, calories: string];
   missing_details_clarification: [clientName: string];
   trainer_alert: [clientName: string, alertDetail: string];
@@ -89,6 +93,25 @@ interface TemplatePayload {
   components?: TemplateComponent[];
 }
 
+const DEFAULT_TEMPLATE_LANGUAGE = "en_US";
+
+export function getWhatsAppTemplateLanguage(kind: "onboarding" | "daily_checkin"): string {
+  const configured = kind === "onboarding"
+    ? process.env.WHATSAPP_ONBOARDING_TEMPLATE_LANGUAGE
+    : process.env.WHATSAPP_DAILY_CHECKIN_TEMPLATE_LANGUAGE;
+  return configured?.trim() || DEFAULT_TEMPLATE_LANGUAGE;
+}
+
+export function getWhatsAppTemplateName(kind: "onboarding" | "daily_checkin"): TemplateId {
+  const configured = kind === "onboarding"
+    ? process.env.WHATSAPP_ONBOARDING_TEMPLATE_NAME
+    : process.env.WHATSAPP_DAILY_CHECKIN_TEMPLATE_NAME;
+  const fallback = kind === "onboarding"
+    ? "nutrirelay_client_onboarding"
+    : "nutrirelay_next_morning";
+  return (configured?.trim() || fallback) as TemplateId;
+}
+
 function buildTemplatePayload<T extends TemplateId>(
   templateId: T,
   params: TemplateParamMap[T]
@@ -100,6 +123,11 @@ function buildTemplatePayload<T extends TemplateId>(
     };
   }
 
+  const language = templateId === "nutrirelay_client_onboarding"
+    ? getWhatsAppTemplateLanguage("onboarding")
+    : templateId === "nutrirelay_next_morning"
+      ? getWhatsAppTemplateLanguage("daily_checkin")
+      : "en";
   const bodyParams = (params as unknown[]).map((p) => ({
     type: "text" as const,
     text: String(p),
@@ -107,7 +135,7 @@ function buildTemplatePayload<T extends TemplateId>(
 
   return {
     name: templateId,
-    language: { code: "en" },
+    language: { code: language },
     components: [{ type: "body", parameters: bodyParams }],
   };
 }
@@ -247,7 +275,7 @@ export async function sendFreeMessage(
   const lastAt = await getLastInboundAt(normalized);
 
   if (!isWindowOpen(lastAt)) {
-    throw new WindowClosedError(normalized);
+    throw new WindowClosedError();
   }
 
   const result = await callMetaApi(trainerId, {
@@ -352,7 +380,7 @@ export async function sendInteractiveListMessage(input: {
 
   const lastAt = await getLastInboundAt(normalized);
   if (!isWindowOpen(lastAt)) {
-    throw new WindowClosedError(normalized);
+    throw new WindowClosedError();
   }
 
   if (input.options.length === 0 || input.options.length > 10) {
@@ -414,11 +442,8 @@ export async function sendMessage(
   if (isWindowOpen(lastAt)) {
     await sendFreeMessage(trainerId, normalized, text);
   } else {
-    await sendTemplateMessage(
-      trainerId,
-      normalized,
-      fallbackTemplateId,
-      fallbackParams as TemplateParamMap[typeof fallbackTemplateId]
-    );
+    void fallbackTemplateId;
+    void fallbackParams;
+    throw new WindowClosedError();
   }
 }
