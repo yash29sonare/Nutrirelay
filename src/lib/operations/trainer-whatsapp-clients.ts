@@ -3,7 +3,9 @@ import { getWhatsAppServiceDb, normalizeWhatsAppPhone } from "@/lib/whatsapp/ser
 import {
   getWhatsAppTemplateLanguage,
   getWhatsAppTemplateName,
+  sendFreeMessage,
   sendTemplateMessage,
+  WindowClosedError,
   type TemplateId,
 } from "@/lib/whatsapp/send"
 
@@ -138,8 +140,35 @@ export interface UpdateTrainerWhatsAppClientResult {
   message: string
 }
 
+export interface TrainerClientMessageDraft {
+  id: string | null
+  trainer_id: string
+  whatsapp_client_id: string
+  title: string | null
+  body: string
+  purpose: "diet_followup"
+  updated_at: string | null
+}
+
+export interface SaveTrainerClientMessageDraftInput {
+  authUserId: string
+  clientId: string
+  title: string | null
+  body: string
+}
+
+export type SendTrainerClientCustomMessageInput = SaveTrainerClientMessageDraftInput
+
+export interface TrainerClientMessageResult {
+  ok: boolean
+  message: string
+  draft?: TrainerClientMessageDraft | null
+  wamId?: string | null
+}
+
 const DEFAULT_TEMPLATE_VALUE = "there"
 const DEFAULT_BUSINESS_NAME = "NutriRelay"
+const CUSTOM_MESSAGE_WINDOW_CLOSED_MESSAGE = "The 24-hour WhatsApp window is closed. Send an approved template first."
 
 export interface WhatsAppTemplatePreview {
   available: boolean
@@ -296,6 +325,28 @@ function latestIso(values: Array<string | null | undefined>): string | null {
     .filter((value) => !Number.isNaN(new Date(value).getTime()))
     .sort((a, b) => b.localeCompare(a))
   return valid[0] ?? null
+}
+
+function isMissingDraftTableError(error: { code?: string; message?: string } | null | undefined): boolean {
+  return error?.code === "42P01" || Boolean(error?.message?.toLowerCase().includes("trainer_client_message_drafts"))
+}
+
+function normalizeDraftInput(input: {
+  title: string | null
+  body: string
+}): { title: string | null; body: string; error: string | null } {
+  const title = input.title?.trim() || null
+  const body = input.body.trim()
+  if (title && title.length > 120) {
+    return { title, body, error: "Message title must be 120 characters or fewer." }
+  }
+  if (!body) {
+    return { title, body, error: "Message body is required." }
+  }
+  if (body.length > 4000) {
+    return { title, body, error: "Message body must be 4000 characters or fewer." }
+  }
+  return { title, body, error: null }
 }
 
 function metadataText(metadata: Record<string, unknown> | null, keys: string[]): string | null {
@@ -597,6 +648,202 @@ export async function getDailyCheckInReadiness(input: {
     }),
     trainerLocalDate: todayKey,
     alreadySentToday,
+  }
+}
+
+async function getOwnedActiveWhatsAppClient(input: {
+  authUserId: string
+  clientId: string
+}): Promise<{
+  client_id: string
+  trainer_id: string
+  client_name: string
+  normalized_whatsapp_number: string | null
+  whatsapp_number: string | null
+  status: string
+} | null> {
+  const db = getWhatsAppServiceDb()
+  const { data, error } = await db
+    .from("trainer_whatsapp_clients")
+    .select("client_id, trainer_id, client_name, normalized_whatsapp_number, whatsapp_number, status")
+    .eq("trainer_id", input.authUserId)
+    .eq("client_id", input.clientId)
+    .neq("status", "archived")
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to verify WhatsApp client access: ${error.message}`)
+  }
+
+  return (data as {
+    client_id: string
+    trainer_id: string
+    client_name: string
+    normalized_whatsapp_number: string | null
+    whatsapp_number: string | null
+    status: string
+  } | null) ?? null
+}
+
+function mapMessageDraft(row: {
+  id: string
+  trainer_id: string
+  whatsapp_client_id: string
+  title: string | null
+  body: string
+  purpose: string | null
+  updated_at: string | null
+} | null): TrainerClientMessageDraft | null {
+  if (!row) return null
+  return {
+    id: row.id,
+    trainer_id: row.trainer_id,
+    whatsapp_client_id: row.whatsapp_client_id,
+    title: row.title,
+    body: row.body,
+    purpose: "diet_followup",
+    updated_at: row.updated_at,
+  }
+}
+
+export async function getTrainerClientMessageDraft(
+  authUserId: string,
+  clientId: string,
+): Promise<TrainerClientMessageDraft | null> {
+  const ownedClient = await getOwnedActiveWhatsAppClient({ authUserId, clientId })
+  if (!ownedClient) return null
+
+  const db = getWhatsAppServiceDb()
+  const { data, error } = await db
+    .from("trainer_client_message_drafts")
+    .select("id, trainer_id, whatsapp_client_id, title, body, purpose, updated_at")
+    .eq("trainer_id", authUserId)
+    .eq("whatsapp_client_id", clientId)
+    .eq("purpose", "diet_followup")
+    .maybeSingle()
+
+  if (isMissingDraftTableError(error)) return null
+  if (error) {
+    throw new Error(`Failed to load client message draft: ${error.message}`)
+  }
+
+  return mapMessageDraft(data as Parameters<typeof mapMessageDraft>[0])
+}
+
+export async function saveTrainerClientMessageDraft(
+  input: SaveTrainerClientMessageDraftInput,
+): Promise<TrainerClientMessageResult> {
+  const normalized = normalizeDraftInput(input)
+  if (normalized.error) return { ok: false, message: normalized.error }
+
+  const ownedClient = await getOwnedActiveWhatsAppClient({ authUserId: input.authUserId, clientId: input.clientId })
+  if (!ownedClient) return { ok: false, message: "Client not found." }
+
+  const db = getWhatsAppServiceDb()
+  const { data, error } = await db
+    .from("trainer_client_message_drafts")
+    .upsert({
+      trainer_id: input.authUserId,
+      whatsapp_client_id: input.clientId,
+      title: normalized.title,
+      body: normalized.body,
+      purpose: "diet_followup",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "trainer_id,whatsapp_client_id,purpose" })
+    .select("id, trainer_id, whatsapp_client_id, title, body, purpose, updated_at")
+    .maybeSingle()
+
+  if (isMissingDraftTableError(error)) {
+    return { ok: false, message: "Draft storage migration is not applied yet." }
+  }
+  if (error) {
+    return { ok: false, message: error.message }
+  }
+
+  return {
+    ok: true,
+    message: "Draft saved.",
+    draft: mapMessageDraft(data as Parameters<typeof mapMessageDraft>[0]),
+  }
+}
+
+async function verifyTrainerConnectedSender(authUserId: string): Promise<boolean> {
+  const db = getWhatsAppServiceDb()
+  const { data } = await db
+    .from("trainer_waba_credentials")
+    .select("id")
+    .eq("trainer_id", authUserId)
+    .eq("status", "connected")
+    .not("phone_number_id", "is", null)
+    .not("waba_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return Boolean(data)
+}
+
+export async function sendTrainerClientCustomMessage(
+  input: SendTrainerClientCustomMessageInput,
+): Promise<TrainerClientMessageResult> {
+  const normalized = normalizeDraftInput(input)
+  if (normalized.error) return { ok: false, message: normalized.error }
+
+  const ownedClient = await getOwnedActiveWhatsAppClient({ authUserId: input.authUserId, clientId: input.clientId })
+  if (!ownedClient) return { ok: false, message: "Client not found." }
+  if (ownedClient.status !== "active") return { ok: false, message: "Only active WhatsApp clients can receive custom messages." }
+
+  const normalizedPhone = normalizeWhatsAppPhone(ownedClient.normalized_whatsapp_number ?? ownedClient.whatsapp_number)
+  if (!normalizedPhone) return { ok: false, message: "Client WhatsApp number is invalid." }
+
+  const hasConnectedSender = await verifyTrainerConnectedSender(input.authUserId)
+  if (!hasConnectedSender) return { ok: false, message: "Connect your WhatsApp sender before sending custom messages." }
+
+  const windowStatus = await getTrainerWhatsAppClientWindowStatus(input.authUserId, input.clientId, "Asia/Kolkata")
+  if (!windowStatus.isOpen) {
+    return { ok: false, message: CUSTOM_MESSAGE_WINDOW_CLOSED_MESSAGE }
+  }
+
+  const saveResult = await saveTrainerClientMessageDraft(input)
+  if (!saveResult.ok) return saveResult
+
+  const text = normalized.title ? `${normalized.title}\n\n${normalized.body}` : normalized.body
+  try {
+    const result = await sendFreeMessage(input.authUserId, normalizedPhone, text)
+    const db = getWhatsAppServiceDb()
+    await db
+      .from("communication_logs")
+      .insert({
+        trainer_id: input.authUserId,
+        client_id: null,
+        whatsapp_client_id: input.clientId,
+        direction: "OUTBOUND",
+        message_type: "TEXT",
+        wam_id: result.wamId,
+        message_timestamp: new Date().toISOString(),
+        delivery_status: "sent",
+        metadata: {
+          custom_message: true,
+          purpose: "diet_followup",
+          title: normalized.title,
+          message_preview: normalized.body.slice(0, 280),
+        },
+      })
+
+    return {
+      ok: true,
+      message: "Custom message sent.",
+      draft: saveResult.draft ?? null,
+      wamId: result.wamId,
+    }
+  } catch (error) {
+    if (error instanceof WindowClosedError) {
+      return { ok: false, message: CUSTOM_MESSAGE_WINDOW_CLOSED_MESSAGE, draft: saveResult.draft ?? null }
+    }
+    if (error instanceof Error) {
+      return { ok: false, message: error.message, draft: saveResult.draft ?? null }
+    }
+    return { ok: false, message: "Custom message could not be sent.", draft: saveResult.draft ?? null }
   }
 }
 

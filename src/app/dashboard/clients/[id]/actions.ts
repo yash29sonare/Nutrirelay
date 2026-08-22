@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/utils/supabase/server"
-import { updateTrainerWhatsAppClient } from "@/lib/operations/trainer-whatsapp-clients"
+import {
+  saveTrainerClientMessageDraft,
+  sendTrainerClientCustomMessage,
+  updateTrainerWhatsAppClient,
+} from "@/lib/operations/trainer-whatsapp-clients"
 
 export interface WhatsAppClientDetailsActionState {
   ok: boolean
@@ -62,4 +66,66 @@ export async function updateWhatsAppClientDetailsAction(
   }
 
   return result
+}
+
+export async function saveClientCustomMessageDraftAction(
+  clientId: string,
+  previousState: WhatsAppClientDetailsActionState,
+  formData: FormData,
+): Promise<WhatsAppClientDetailsActionState> {
+  void previousState
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user?.id) {
+    return { ok: false, message: "Sign in before saving a message draft." }
+  }
+
+  const result = await saveTrainerClientMessageDraft({
+    authUserId: user.id,
+    clientId,
+    title: readText(formData, "messageTitle") || null,
+    body: readText(formData, "messageBody"),
+  })
+
+  if (result.ok) {
+    revalidatePath(`/dashboard/clients/${clientId}`)
+  }
+
+  return { ok: result.ok, message: result.message }
+}
+
+export async function sendClientCustomMessageAction(
+  clientId: string,
+  previousState: WhatsAppClientDetailsActionState,
+  formData: FormData,
+): Promise<WhatsAppClientDetailsActionState> {
+  void previousState
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user?.id) {
+    return { ok: false, message: "Sign in before sending a message." }
+  }
+
+  const result = await sendTrainerClientCustomMessage({
+    authUserId: user.id,
+    clientId,
+    title: readText(formData, "messageTitle") || null,
+    body: readText(formData, "messageBody"),
+  })
+
+  if (result.ok) {
+    revalidatePath("/dashboard")
+    revalidatePath("/dashboard/clients")
+    revalidatePath(`/dashboard/clients/${clientId}`)
+  }
+
+  return { ok: result.ok, message: result.message }
 }

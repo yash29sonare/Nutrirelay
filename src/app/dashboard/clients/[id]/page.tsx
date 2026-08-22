@@ -26,12 +26,11 @@ import { getClientDetail, getClientWhatsAppConversation, type ClientWhatsAppMess
 import {
   getDailyCheckInReadiness,
   getOnboardingTemplatePreview,
+  getTrainerClientMessageDraft,
   getTrainerWhatsAppClientDashboard,
   getTrainerWhatsAppClientDetail,
   getTrainerWhatsAppClientWindowStatus,
-  type DailyCheckInReadiness,
   type TrainerWhatsAppClientMeal,
-  type WhatsAppTemplatePreview,
 } from "@/lib/operations/trainer-whatsapp-clients"
 import type { ClientSummary } from "@/types/dashboard"
 import type { MealRecord } from "@/types/meal"
@@ -40,6 +39,7 @@ import { ClientTimeline } from "./components/ClientTimeline"
 import { MealHistory } from "./components/MealHistory"
 import { ClientNameEditor } from "./components/ClientNameEditor"
 import { WhatsAppClientEditButton } from "./components/WhatsAppClientContactEditor"
+import { CustomMessageComposer } from "./components/CustomMessageComposer"
 import { SendOnboardingButton } from "../AddWhatsAppClientDialog"
 import { DailyReviewNav } from "./components/DailyReviewNav"
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format"
@@ -328,67 +328,6 @@ function mediaReadinessText(message: ClientWhatsAppMessage): string | null {
   return [mediaLabel, storageState, transcriptState, parserState, skipState].filter(Boolean).join(" · ")
 }
 
-function TemplateVariableList({ preview }: { preview: WhatsAppTemplatePreview }) {
-  const parameters = preview.components.flatMap((component) => component.parameters)
-  if (parameters.length === 0) return <span>No variables</span>
-
-  return (
-    <div className="space-y-1">
-      {parameters.map((parameter) => (
-        <p key={parameter.placeholder} className="text-sm font-medium text-[var(--foreground)]">
-          {parameter.placeholder} = {parameter.valueKey}
-          <span className="text-[var(--muted)]"> ({parameter.value})</span>
-        </p>
-      ))}
-    </div>
-  )
-}
-
-function DailyCheckInReadinessCard({ readiness }: { readiness: DailyCheckInReadiness }) {
-  return (
-    <Card>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-[var(--foreground)]">Daily restart template</p>
-            <p className="text-xs text-[var(--muted)]">Passive readiness preview for trainer-local date {readiness.trainerLocalDate}</p>
-          </div>
-          <Badge variant={readiness.ready ? "success" : "warning"}>
-            {readiness.ready ? "Ready" : "Not ready"}
-          </Badge>
-        </div>
-        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <p className="text-xs text-[var(--muted)]">Template</p>
-            <p className="font-medium text-[var(--foreground)]">{readiness.template.templateName ?? "Unavailable"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-[var(--muted)]">Language</p>
-            <p className="font-medium text-[var(--foreground)]">{readiness.template.language ?? "Unavailable"}</p>
-          </div>
-          <div className="sm:col-span-2">
-            <p className="text-xs text-[var(--muted)]">Variables</p>
-            <div className="mt-1">
-              <TemplateVariableList preview={readiness.template} />
-            </div>
-          </div>
-        </div>
-        <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] px-3 py-2">
-          <p className="text-xs font-medium uppercase text-[var(--muted)]">Local preview</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--foreground)]">
-            {readiness.template.finalPreviewText}
-          </p>
-        </div>
-        {readiness.reasons.length > 0 ? (
-          <InlineNotice variant="warning">{readiness.reasons.join(" ")}</InlineNotice>
-        ) : (
-          <InlineNotice variant="info">Prepared only. No daily template is sent from this preview.</InlineNotice>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
 function WhatsAppConversation({ messages, error }: { messages: ClientWhatsAppMessage[]; error: string | null }) {
   const visibleMessages = messages.filter(isRelevantConversationMessage)
 
@@ -617,7 +556,7 @@ export default async function ClientDetailPage({
       trainerName,
       businessName,
     })
-    const [whatsAppWindowStatus, dailyCheckInReadiness] = await Promise.all([
+    const [whatsAppWindowStatus, dailyCheckInReadiness, customMessageDraft] = await Promise.all([
       getTrainerWhatsAppClientWindowStatus(authUserId, id, trainerTimezone),
       getDailyCheckInReadiness({
         authUserId,
@@ -626,7 +565,9 @@ export default async function ClientDetailPage({
         trainerName,
         businessName,
       }),
+      getTrainerClientMessageDraft(authUserId, id),
     ])
+    const dailyTemplateConfigMissing = !dailyCheckInReadiness.template.templateName || !dailyCheckInReadiness.template.language
     const selectedDayWhatsAppMeals = whatsappDashboard.meals.filter((meal) => meal.logged_at.slice(0, 10) === selectedDateKey)
     const selectedDayMedia = whatsappDashboard.media.filter((item) => item.message_timestamp.slice(0, 10) === selectedDateKey)
     const selectedDayMacros = sumWhatsAppMeals(selectedDayWhatsAppMeals)
@@ -753,7 +694,28 @@ export default async function ClientDetailPage({
             </CardContent>
           </Card>
 
-          <DailyCheckInReadinessCard readiness={dailyCheckInReadiness} />
+          {dailyCheckInReadiness.ready ? (
+            <div>
+              <Badge variant="success">Daily check-in ready</Badge>
+            </div>
+          ) : dailyTemplateConfigMissing ? (
+            <InlineNotice variant="warning">
+              Daily check-in template configuration needs attention.
+            </InlineNotice>
+          ) : null}
+
+          <DashboardSection title="Custom message to client" description="Client-specific diet plan, follow-up, or instructions.">
+            <Card>
+              <CardContent className="space-y-4">
+                <CustomMessageComposer
+                  clientId={whatsappClientDetail.client_id}
+                  draft={customMessageDraft}
+                  canSend={whatsAppWindowStatus.isOpen}
+                  windowMessage={whatsAppWindowStatus.message}
+                />
+              </CardContent>
+            </Card>
+          </DashboardSection>
 
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-6">
             <DashboardSection title="Daily Macros" description={`${selectedDayWhatsAppMeals.length} logged intake event${selectedDayWhatsAppMeals.length !== 1 ? "s" : ""} for ${formatDate(selectedDate)}`}>
