@@ -279,15 +279,15 @@ async function augmentDashboardWithWhatsAppClients(
   }
 
   const whatsappRows = (whatsappClients ?? []) as WhatsAppClientDashboardRow[]
-  const whatsappPhoneSet = new Set(
-    whatsappRows
+  const activeWhatsAppRows = whatsappRows.filter((row) => row.status === "active")
+  const activeWhatsAppPhoneSet = new Set(
+    activeWhatsAppRows
       .map((row) => normalizeWhatsAppPhone(row.normalized_whatsapp_number ?? row.whatsapp_number))
       .filter((phone): phone is string => Boolean(phone)),
   )
   const canonicalLegacyClients = legacyClientsWithPhone.filter((client) =>
-    !client.normalized_phone || !whatsappPhoneSet.has(client.normalized_phone),
+    !client.normalized_phone || !activeWhatsAppPhoneSet.has(client.normalized_phone),
   )
-  const activeWhatsAppRows = whatsappRows.filter((row) => row.status === "active")
 
   if (activeWhatsAppRows.length === 0) {
     return {
@@ -706,9 +706,10 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
 
   const clientIds = (trainerClients ?? []).map((row) => row.client_id)
   const activeClients = clientIds.length
-  const todayKey = startOfUtcDay().toISOString().slice(0, 10)
-  const lastWeekKey = startOfUtcDay(-7).toISOString().slice(0, 10)
-  const complianceWindowStart = startOfUtcDay(-6).toISOString()
+  const trainerTimezone = getTrainerTimezone(trainer)
+  const todayKey = todayKeyInTimezone(trainerTimezone)
+  const lastWeekKey = dateKeyInTimezone(startOfUtcDay(-7).toISOString(), trainerTimezone)
+  const complianceWindowStartKey = dateKeyInTimezone(startOfUtcDay(-6).toISOString(), trainerTimezone)
   const activityWindowStart = startOfUtcDay(-7).toISOString()
 
   if (clientIds.length === 0) {
@@ -734,7 +735,7 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
         },
         trends: {
           complianceOverTime: Array.from({ length: 7 }, (_, index) => ({
-            date: startOfUtcDay(index - 6).toISOString().slice(0, 10),
+            date: dateKeyInTimezone(startOfUtcDay(index - 6).toISOString(), trainerTimezone),
             compliance_rate: 0,
           })),
           clientActivity: [],
@@ -794,7 +795,7 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
 
   const complianceSets = new Map<string, Set<string>>()
   for (let index = 0; index < 7; index += 1) {
-    const dateKey = startOfUtcDay(index - 6).toISOString().slice(0, 10)
+    const dateKey = dateKeyInTimezone(startOfUtcDay(index - 6).toISOString(), trainerTimezone)
     complianceSets.set(dateKey, new Set<string>())
   }
 
@@ -829,9 +830,9 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
   }
 
   for (const row of logs) {
-    const dateKey = toUtcDateKey(row.logged_at)
+    const dateKey = dateKeyInTimezone(row.logged_at, trainerTimezone)
 
-    if (dateKey >= complianceWindowStart.slice(0, 10)) {
+    if (dateKey >= complianceWindowStartKey) {
       complianceSets.get(dateKey)?.add(row.client_id)
     }
 
@@ -867,7 +868,7 @@ async function readDashboardDataDirect(authUserId: string): Promise<DashboardRes
   )
 
   const complianceOverTime = Array.from({ length: 7 }, (_, index) => {
-    const date = startOfUtcDay(index - 6).toISOString().slice(0, 10)
+    const date = dateKeyInTimezone(startOfUtcDay(index - 6).toISOString(), trainerTimezone)
     const loggerCount = complianceSets.get(date)?.size ?? 0
 
     return {

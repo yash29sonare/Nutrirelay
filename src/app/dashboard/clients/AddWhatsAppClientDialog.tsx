@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input"
 import { Textarea } from "@/components/ui/Textarea"
 import { InlineNotice } from "@/components/ui/InlineNotice"
 import { addWhatsAppClientAction, sendClientOnboardingAction, type AddWhatsAppClientActionState } from "./actions"
+import type { OnboardingTemplatePreview } from "@/lib/operations/trainer-whatsapp-clients"
 
 const INITIAL_STATE: AddWhatsAppClientActionState = {
   ok: false,
@@ -79,7 +80,7 @@ export function AddWhatsAppClientDialog() {
 
           {state.message ? (
             <InlineNotice variant={state.ok ? "success" : "error"}>
-              {state.message}
+              {state.message}{state.wamId ? ` WAM ID: ${state.wamId}` : ""}
             </InlineNotice>
           ) : null}
 
@@ -97,8 +98,15 @@ export function AddWhatsAppClientDialog() {
   )
 }
 
-export function SendOnboardingButton({ clientId }: { clientId: string }) {
+export function SendOnboardingButton({
+  clientId,
+  preview,
+}: {
+  clientId: string
+  preview: OnboardingTemplatePreview
+}) {
   const router = useRouter()
+  const [open, setOpen] = useState(false)
   const [state, setState] = useState<AddWhatsAppClientActionState>(INITIAL_STATE)
   const [pending, startTransition] = useTransition()
 
@@ -106,6 +114,7 @@ export function SendOnboardingButton({ clientId }: { clientId: string }) {
     startTransition(async () => {
       const result = await sendClientOnboardingAction(clientId)
       setState(result)
+      if (result.ok) setOpen(false)
       router.refresh()
     })
   }
@@ -117,14 +126,78 @@ export function SendOnboardingButton({ clientId }: { clientId: string }) {
         variant="outline"
         size="sm"
         icon={<Send size={13} aria-hidden="true" />}
-        loading={pending}
-        onClick={handleSend}
+        onClick={() => setOpen(true)}
       >
         Send onboarding
       </Button>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Preview onboarding message"
+        className="max-w-xl"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-overlay)] p-4">
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-[var(--muted)]">Template</p>
+                <p className="font-medium text-[var(--foreground)]">{preview.templateName ?? "Unavailable"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-[var(--muted)]">Language</p>
+                <p className="font-medium text-[var(--foreground)]">{preview.language ?? "Unavailable"}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-xs text-[var(--muted)]">Variables / components</p>
+                <p className="font-medium text-[var(--foreground)]">
+                  {preview.components.length > 0
+                    ? preview.components.map((component) => `${component.type}: ${component.parameters.join(", ")}`).join("; ")
+                    : "No variables"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-card)] p-4">
+            <p className="text-xs font-medium uppercase text-[var(--muted)]">Local best preview</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--foreground)]">
+              {preview.finalPreviewText}
+            </p>
+            {!preview.exactMetaRenderedTextAvailable ? (
+              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
+                Exact Meta-rendered text is not fetched by this app; this preview is based on the local approved-template configuration.
+              </p>
+            ) : null}
+          </div>
+
+          <InlineNotice variant="info">{preview.editGuidance}</InlineNotice>
+
+          {state.message ? (
+            <InlineNotice variant={state.ok ? "success" : "error"}>
+              {state.message}{state.wamId ? ` WAM ID: ${state.wamId}` : ""}
+            </InlineNotice>
+          ) : null}
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="brand"
+              icon={<Send size={13} aria-hidden="true" />}
+              loading={pending}
+              disabled={!preview.available}
+              onClick={handleSend}
+            >
+              Send approved template
+            </Button>
+          </div>
+        </div>
+      </Dialog>
       {state.message ? (
         <p className={`max-w-56 text-right text-xs ${state.ok ? "text-emerald-400" : "text-red-300"}`}>
-          {state.message}
+          {state.message}{state.wamId ? ` WAM ID: ${state.wamId}` : ""}
         </p>
       ) : null}
     </div>

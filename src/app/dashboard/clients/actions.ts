@@ -8,6 +8,7 @@ import { addTrainerWhatsAppClient, sendTrainerWhatsAppClientOnboarding } from "@
 export interface AddWhatsAppClientActionState {
   ok: boolean
   message: string
+  wamId?: string | null
 }
 
 const DEFAULT_ERROR_STATE: AddWhatsAppClientActionState = {
@@ -89,6 +90,7 @@ export async function sendClientOnboardingAction(clientId: string): Promise<AddW
 
   revalidatePath("/dashboard")
   revalidatePath("/dashboard/clients")
+  revalidatePath(`/dashboard/clients/${clientId}`)
 
   return result
 }

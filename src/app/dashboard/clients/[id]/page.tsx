@@ -24,6 +24,7 @@ import { mapMealRecordsToTimelineEntries } from "@/lib/meals/mealTimelineMapper"
 import { getTrainerProfile } from "@/lib/operations/trainer"
 import { getClientDetail, getClientWhatsAppConversation, type ClientWhatsAppMessage } from "@/lib/dashboard-reads"
 import {
+  getOnboardingTemplatePreview,
   getTrainerWhatsAppClientDashboard,
   getTrainerWhatsAppClientDetail,
   type TrainerWhatsAppClientMeal,
@@ -431,6 +432,18 @@ function canSendWhatsAppOnlyOnboarding(status: string, clientStatus: string): bo
   return clientStatus === "active" && (status === "not_sent" || status === "failed")
 }
 
+function formatTrainerLocalDateTime(timeZone: string): string {
+  return new Date().toLocaleString("en-IN", {
+    timeZone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+}
+
 export default async function ClientDetailPage({
   params,
   searchParams,
@@ -521,6 +534,8 @@ export default async function ClientDetailPage({
   if (whatsappClientDetail) {
     const conversation = await getWhatsAppConversationWithTimeout(id, authUserId)
     const whatsappDashboard = await getTrainerWhatsAppClientDashboard(authUserId, id)
+    const onboardingTemplatePreview = getOnboardingTemplatePreview()
+    const trainerTimezone = trainerProfile?.timezone?.trim() || "Asia/Kolkata"
     const selectedDayWhatsAppMeals = whatsappDashboard.meals.filter((meal) => meal.logged_at.slice(0, 10) === selectedDateKey)
     const selectedDayMedia = whatsappDashboard.media.filter((item) => item.message_timestamp.slice(0, 10) === selectedDateKey)
     const selectedDayMacros = sumWhatsAppMeals(selectedDayWhatsAppMeals)
@@ -600,10 +615,14 @@ export default async function ClientDetailPage({
               {selectedDayWhatsAppMeals.length} intake event{selectedDayWhatsAppMeals.length !== 1 ? "s" : ""} on {formatDate(selectedDate)} · {formatNumber(Math.round(selectedDayMacros.calories))} kcal logged
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface-card)] px-3 py-2 text-right">
+              <p className="text-[10px] uppercase text-[var(--muted)]">Trainer local time</p>
+              <p className="text-xs font-medium text-[var(--foreground)]">{formatTrainerLocalDateTime(trainerTimezone)}</p>
+            </div>
             <WhatsAppClientEditButton client={whatsappClientDetail} />
             {canSendWhatsAppOnlyOnboarding(whatsappClientDetail.onboarding_message_status, whatsappClientDetail.status) ? (
-              <SendOnboardingButton clientId={whatsappClientDetail.client_id} />
+              <SendOnboardingButton clientId={whatsappClientDetail.client_id} preview={onboardingTemplatePreview} />
             ) : null}
           </div>
         </div>

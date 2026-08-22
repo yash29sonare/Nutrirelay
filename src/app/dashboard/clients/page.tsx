@@ -10,6 +10,7 @@ import { AddWhatsAppClientDialog, SendOnboardingButton } from "./AddWhatsAppClie
 import { getDashboardData } from "@/lib/operations/dashboard"
 import { getClientList } from "@/lib/operations/clients"
 import {
+  getOnboardingTemplatePreview,
   getTrainerWhatsAppClientCount,
   listTrainerWhatsAppClients,
   type TrainerWhatsAppClientRow,
@@ -228,6 +229,7 @@ export default async function ClientsPage({
   const whatsappClients = authUserId
     ? await listTrainerWhatsAppClients(authUserId)
     : []
+  const onboardingTemplatePreview = getOnboardingTemplatePreview()
   const filteredWhatsAppClients = getWhatsAppClientList(whatsappClients, {
     search: q,
     status: validStatus,
@@ -362,7 +364,7 @@ export default async function ClientsPage({
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     {getOnboardingBadge(row.client.onboarding_message_status)}
                     {canSendOnboarding(row.client) ? (
-                      <SendOnboardingButton clientId={row.client.client_id} />
+                      <SendOnboardingButton clientId={row.client.client_id} preview={onboardingTemplatePreview} />
                     ) : null}
                   </div>
                 </div>

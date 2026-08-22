@@ -90,12 +90,14 @@ export interface AddTrainerWhatsAppClientResult {
   ok: boolean
   message: string
   clientId?: string
+  wamId?: string | null
 }
 
 export interface SendTrainerWhatsAppClientOnboardingResult {
   ok: boolean
   message: string
   clientId?: string
+  wamId?: string | null
 }
 
 export interface UpdateTrainerWhatsAppClientInput {
@@ -117,12 +119,58 @@ export interface UpdateTrainerWhatsAppClientResult {
 }
 
 const DEFAULT_ONBOARDING_TEMPLATE_ID: TemplateId = "hello_world"
+const HELLO_WORLD_LOCAL_PREVIEW = "Hello World"
 
-function getConfiguredOnboardingTemplate(): TemplateId | null {
+export interface OnboardingTemplatePreview {
+  available: boolean
+  templateId: TemplateId | null
+  templateName: string | null
+  language: string | null
+  components: Array<{
+    type: "body" | "header"
+    parameters: string[]
+  }>
+  finalPreviewText: string
+  source: "env" | "default" | "unsupported_env"
+  exactMetaRenderedTextAvailable: boolean
+  editGuidance: string
+}
+
+function getConfiguredOnboardingTemplate(): { templateId: TemplateId | null; source: OnboardingTemplatePreview["source"] } {
   const configured = process.env.WHATSAPP_ONBOARDING_TEMPLATE_ID?.trim()
-  if (!configured) return DEFAULT_ONBOARDING_TEMPLATE_ID
-  if (configured === "hello_world") return "hello_world"
-  return null
+  if (!configured) return { templateId: DEFAULT_ONBOARDING_TEMPLATE_ID, source: "default" }
+  if (configured === "hello_world") return { templateId: "hello_world", source: "env" }
+  return { templateId: null, source: "unsupported_env" }
+}
+
+export function getOnboardingTemplatePreview(): OnboardingTemplatePreview {
+  const configured = getConfiguredOnboardingTemplate()
+
+  if (configured.templateId === "hello_world") {
+    return {
+      available: true,
+      templateId: "hello_world",
+      templateName: "hello_world",
+      language: "en_US",
+      components: [],
+      finalPreviewText: HELLO_WORLD_LOCAL_PREVIEW,
+      source: configured.source,
+      exactMetaRenderedTextAvailable: false,
+      editGuidance: "To change the actual WhatsApp message, update the approved template in Meta and wait for approval.",
+    }
+  }
+
+  return {
+    available: false,
+    templateId: null,
+    templateName: null,
+    language: null,
+    components: [],
+    finalPreviewText: "Onboarding template is not configured to a supported approved template.",
+    source: configured.source,
+    exactMetaRenderedTextAvailable: false,
+    editGuidance: "To change the actual WhatsApp message, update the approved template in Meta and wait for approval.",
+  }
 }
 
 function safeFailureReason(error: unknown): string {
@@ -179,6 +227,22 @@ function resultWarning(
 
 function isEditableStatus(value: string): value is "active" | "inactive" {
   return value === "active" || value === "inactive"
+}
+
+async function countWhatsAppReports(input: {
+  table: "weekly_reports" | "monthly_reports"
+  clientId: string
+}): Promise<{ count: number; error: { message?: string } | null }> {
+  const db = getWhatsAppServiceDb()
+  const result = await db
+    .from(input.table)
+    .select("id", { count: "exact", head: true })
+    .eq("whatsapp_client_id", input.clientId)
+
+  return {
+    count: result.count ?? 0,
+    error: result.error ? { message: result.error.message } : null,
+  }
 }
 
 async function hasActivityRows(input: {
@@ -415,16 +479,8 @@ export async function getTrainerWhatsAppClientDashboard(
       .eq("whatsapp_client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(20),
-    db
-      .from("weekly_reports")
-      .select("id", { count: "exact", head: true })
-      .eq("trainer_id", authUserId)
-      .eq("whatsapp_client_id", clientId),
-    db
-      .from("monthly_reports")
-      .select("id", { count: "exact", head: true })
-      .eq("trainer_id", authUserId)
-      .eq("whatsapp_client_id", clientId),
+    countWhatsAppReports({ table: "weekly_reports", clientId }),
+    countWhatsAppReports({ table: "monthly_reports", clientId }),
     db
       .from("communication_logs")
       .select("id", { count: "exact", head: true })
@@ -706,7 +762,7 @@ async function sendOnboardingTemplate(input: {
   sendFailureOk?: boolean
 }): Promise<AddTrainerWhatsAppClientResult> {
   const db = getWhatsAppServiceDb()
-  const templateId = getConfiguredOnboardingTemplate()
+  const templateId = getConfiguredOnboardingTemplate().templateId
 
   if (!templateId) {
     await db
@@ -746,6 +802,7 @@ async function sendOnboardingTemplate(input: {
     return {
       ok: true,
       clientId: input.clientId,
+      wamId: result.wamId,
       message: input.successMessage ?? "Client added and onboarding template sent.",
     }
   } catch (error) {
@@ -807,11 +864,11 @@ export async function addTrainerWhatsAppClient(input: AddTrainerWhatsAppClientIn
     return { ok: false, message: "Client could not be saved." }
   }
 
-  return sendOnboardingTemplate({
-    authUserId: input.authUserId,
+  return {
+    ok: true,
     clientId,
-    normalizedPhone,
-  })
+    message: "Client saved. Review the onboarding template preview before sending.",
+  }
 }
 
 export async function sendTrainerWhatsAppClientOnboarding(
